@@ -1,3 +1,12 @@
+<?php
+$required_role = 'Student';
+include 'session_check.php';
+
+$first_name = htmlspecialchars($_SESSION['first_name']);
+$last_name  = htmlspecialchars($_SESSION['last_name']);
+$initials   = strtoupper(substr($first_name, 0, 1) . substr($last_name, 0, 1));
+$full_name  = $first_name . ' ' . $last_name;
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -11,11 +20,11 @@
                 extend: {
                     colors: {
                         school: {
-                            green: '#0b4222', // Deep forest green
+                            green: '#0b4222',
                             'green-hover': '#072e17',
                             'green-light': '#1e5e37',
-                            gold: '#b8860b', // Rich gold/amber
-                            yellow: '#f4c430', // Bright logo yellow
+                            gold: '#b8860b',
+                            yellow: '#f4c430',
                         }
                     }
                 }
@@ -36,22 +45,19 @@
             </div>
 
             <nav class="space-y-2">
-                <a href="homepage.html" class="flex items-center space-x-3 px-4 py-3 rounded-xl bg-school-green text-white font-semibold transition shadow-md">
+                <a href="homepage.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl bg-school-green text-white font-semibold transition shadow-md">
                     <span class="text-xl">🏛️</span>
                     <span>Institution Home</span>
                 </a>
-
-                <a href="courses.html" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
+                <a href="courses.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
                     <span class="text-xl opacity-70 group-hover:opacity-100">📚</span>
                     <span>Courses</span>
                 </a>
-
-                <a href="activities.html" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
+                <a href="activities.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
                     <span class="text-xl opacity-70 group-hover:opacity-100">🏆</span>
                     <span>Activities</span>
                 </a>
-
-                <a href="grades.html" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
+                <a href="grades.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
                     <span class="text-xl opacity-70 group-hover:opacity-100">📊</span>
                     <span>Grades</span>
                 </a>
@@ -61,14 +67,14 @@
         <div class="mt-8 pt-4 border-t border-gray-200 flex items-center justify-between">
             <div class="flex items-center space-x-3">
                 <div class="w-9 h-9 rounded-full bg-school-gold text-white flex items-center justify-center font-bold font-sans text-sm shadow-sm">
-                    JD
+                    <?= $initials ?>
                 </div>
                 <div>
-                    <h4 class="text-sm font-bold text-school-green leading-tight">John Doe</h4>
+                    <h4 class="text-sm font-bold text-school-green leading-tight"><?= $full_name ?></h4>
                     <p class="text-xs text-gray-500">Student Account</p>
                 </div>
             </div>
-            <a href="login.html" title="Log Out" class="text-gray-400 hover:text-red-600 transition p-1 text-lg">
+            <a href="logout.php" title="Log Out" class="text-gray-400 hover:text-red-600 transition p-1 text-lg">
                 🚪
             </a>
         </div>
@@ -78,7 +84,7 @@
         
         <header class="bg-[#fcfbf7] rounded-2xl p-6 sm:p-8 shadow-lg border border-school-gold/20 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
-                <h1 class="text-3xl font-bold tracking-wide text-school-green">Welcome back</h1>
+                <h1 class="text-3xl font-bold tracking-wide text-school-green">Welcome back, <?= $first_name ?>!</h1>
                 <p class="text-gray-600 italic mt-1">"The roots of education are bitter, but the fruit is sweet."</p>
             </div>
             <div class="bg-school-green/5 text-school-green text-sm px-4 py-2 rounded-xl border border-school-green/10 font-sans">
@@ -92,9 +98,8 @@
                 
                 <section class="bg-[#fcfbf7] rounded-2xl p-6 shadow-lg border border-school-gold/20">
                     <h3 class="text-xl font-bold text-school-green border-b border-gray-100 pb-3 mb-4">🏫 Institutional Announcements</h3>
-                    
-                        //laman ni announcements
-
+                    <!-- Announcements content goes here -->
+                    <p class="text-sm text-gray-400 italic">No announcements at this time.</p>
                 </section>
 
                 <section class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -102,18 +107,16 @@
                         <div class="p-3 bg-school-green/10 rounded-xl text-2xl">📚</div>
                         <div>
                             <h4 class="text-xs font-sans uppercase text-gray-400 tracking-wider font-semibold">Active Enrolled Courses</h4>
-                            
-                                // laman ni courses
-
+                            <!-- Course count goes here -->
+                            <p class="text-2xl font-bold text-school-green mt-1">—</p>
                         </div>
                     </div>
                     <div class="bg-[#fcfbf7] p-5 rounded-2xl shadow-md border border-school-gold/10 flex items-center space-x-4">
                         <div class="p-3 bg-school-gold/10 rounded-xl text-2xl">📝</div>
                         <div>
                             <h4 class="text-xs font-sans uppercase text-gray-400 tracking-wider font-semibold">Pending Activities Due</h4>
-                            
-                            //laman ni activities
-
+                            <!-- Activities count goes here -->
+                            <p class="text-2xl font-bold text-school-green mt-1">—</p>
                         </div>
                     </div>
                 </section>
@@ -123,15 +126,15 @@
                 <section class="bg-[#fcfbf7] rounded-2xl p-6 shadow-lg border border-school-gold/20">
                     <h3 class="text-lg font-bold text-school-green border-b border-gray-100 pb-2 mb-3">⚡ Quick Portal Access</h3>
                     <div class="grid grid-cols-1 gap-2.5 font-sans">
-                        <a href="courses.html" class="p-3 bg-gray-50 rounded-xl hover:bg-school-green/5 border border-gray-200 hover:border-school-green/20 transition flex justify-between items-center text-sm font-medium">
+                        <a href="courses.php" class="p-3 bg-gray-50 rounded-xl hover:bg-school-green/5 border border-gray-200 hover:border-school-green/20 transition flex justify-between items-center text-sm font-medium">
                             <span>Open My Course Syllabus</span>
                             <span class="text-school-green">→</span>
                         </a>
-                        <a href="activities.html" class="p-3 bg-gray-50 rounded-xl hover:bg-school-green/5 border border-gray-200 hover:border-school-green/20 transition flex justify-between items-center text-sm font-medium">
+                        <a href="activities.php" class="p-3 bg-gray-50 rounded-xl hover:bg-school-green/5 border border-gray-200 hover:border-school-green/20 transition flex justify-between items-center text-sm font-medium">
                             <span>View Calendar Deadlines</span>
                             <span class="text-school-green">→</span>
                         </a>
-                        <a href="grades.html" class="p-3 bg-gray-50 rounded-xl hover:bg-school-green/5 border border-gray-200 hover:border-school-green/20 transition flex justify-between items-center text-sm font-medium">
+                        <a href="grades.php" class="p-3 bg-gray-50 rounded-xl hover:bg-school-green/5 border border-gray-200 hover:border-school-green/20 transition flex justify-between items-center text-sm font-medium">
                             <span>Check Report Card History</span>
                             <span class="text-school-green">→</span>
                         </a>
@@ -142,7 +145,7 @@
                     <div class="absolute -right-6 -bottom-6 text-white/5 text-8xl font-sans pointer-events-none select-none">🏛️</div>
                     <h4 class="text-school-yellow uppercase tracking-widest text-xs font-bold font-sans">The Institutional Pillars</h4>
                     <p class="text-lg font-bold mt-2 leading-snug">"Charity, Wisdom, Obedience"</p>
-                    <p class="text-xs text-gray-300 mt-2 leading-relaxed">Instilled during the foundation year of 1994, St. Ives School continuous to nurture lifelong learners focused on community enrichment.</p>
+                    <p class="text-xs text-gray-300 mt-2 leading-relaxed">Instilled during the foundation year of 1994, St. Ives School continues to nurture lifelong learners focused on community enrichment.</p>
                 </section>
             </div>
 
