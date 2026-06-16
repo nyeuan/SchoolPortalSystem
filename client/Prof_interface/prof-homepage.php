@@ -36,22 +36,22 @@
             </div>
 
             <nav class="space-y-2">
-                <a href="homepage.html" class="flex items-center space-x-3 px-4 py-3 rounded-xl bg-school-green text-white font-semibold transition shadow-md">
+                <a href="prof-homepage.html" class="flex items-center space-x-3 px-4 py-3 rounded-xl bg-school-green text-white font-semibold transition shadow-md">
                     <span class="text-xl">🏛️</span>
                     <span>Institution Home</span>
                 </a>
 
-                <a href="courses.html" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
+                <a href="prof-courses.html" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
                     <span class="text-xl opacity-70 group-hover:opacity-100">📚</span>
                     <span>Courses</span>
                 </a>
 
-                <a href="activities.html" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
+                <a href="prof-activities.html" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
                     <span class="text-xl opacity-70 group-hover:opacity-100">🏆</span>
                     <span>Activities</span>
                 </a>
 
-                <a href="grades.html" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
+                <a href="prof-grades.html" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
                     <span class="text-xl opacity-70 group-hover:opacity-100">📊</span>
                     <span>Grades</span>
                 </a>
@@ -64,8 +64,8 @@
                     JD
                 </div>
                 <div>
-                    <h4 class="text-sm font-bold text-school-green leading-tight">John Doe</h4>
-                    <p class="text-xs text-gray-500">Student Account</p>
+                    <h4 class="text-sm font-bold text-school-green leading-tight">Prof Name</h4>
+                    <p class="text-xs text-gray-500">Professor Account</p>
                 </div>
             </div>
             <a href="login.html" title="Log Out" class="text-gray-400 hover:text-red-600 transition p-1 text-lg">
