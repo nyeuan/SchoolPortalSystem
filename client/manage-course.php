@@ -1,3 +1,13 @@
+<?php
+$required_role = 'Professor';
+include 'session_check.php';
+
+$first_name = htmlspecialchars($_SESSION['first_name']);
+$last_name  = htmlspecialchars($_SESSION['last_name']);
+$initials   = strtoupper(substr($first_name, 0, 1) . substr($last_name, 0, 1));
+$full_name  = $first_name . ' ' . $last_name;
+?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>

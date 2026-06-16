@@ -77,6 +77,9 @@ switch ($user['RoleName']) {
     case 'Professor':
         header('Location: prof-homepage.php');
         break;
+    case 'Admin':
+        header('Location: admin-homepage.php');
+        break;
     case 'Student':
     default:
         header('Location: homepage.php');
