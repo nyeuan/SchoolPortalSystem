@@ -1,11 +1,41 @@
+
 <?php
 $required_role = 'Professor';
-include 'session_check.php';
+include 'session_check.php'; // Protects page and pulls down session tokens
 
 $first_name = htmlspecialchars($_SESSION['first_name']);
 $last_name  = htmlspecialchars($_SESSION['last_name']);
 $initials   = strtoupper(substr($first_name, 0, 1) . substr($last_name, 0, 1));
 $full_name  = $first_name . ' ' . $last_name;
+
+// Establish localized database link
+$host     = 'localhost';
+$dbname   = 'learningmanagementsystem';
+$username = 'root';
+$password = '';
+
+try {
+    // Modify port to match your local installation configuration (3306 or 3307)
+    $pdo = new PDO(
+        "mysql:host=$host;port=3307;dbname=$dbname;charset=utf8",
+        $username,
+        $password,
+        [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
+    );
+
+    // Query courses explicitly assigned to this specific Professor
+    $stmt = $pdo->prepare("
+        SELECT c.Course_ID, c.CourseCode, c.CourseName, c.Status 
+        FROM Courses c
+        INNER JOIN CourseInstructors ci ON c.Course_ID = ci.FK_Course_ID
+        WHERE ci.FK_User_ID = :user_id
+    ");
+    $stmt->execute([':user_id' => $_SESSION['user_id']]);
+    $assigned_courses = $stmt->fetchAll();
+
+} catch (PDOException $e) {
+    die("Database Connection Error: " . $e->getMessage());
+}
 ?>
 
 <!DOCTYPE html>
@@ -50,22 +80,22 @@ $full_name  = $first_name . ' ' . $last_name;
             </div>
 
             <nav class="space-y-2">
-                <a href="prof-homepage.html" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
+                <a href="prof-homepage.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
                     <span class="text-xl">🏛️</span>
                     <span>Institution Home</span>
                 </a>
 
-                <a href="prof-courses.html" class="flex items-center space-x-3 px-4 py-3 rounded-xl bg-school-green text-white font-semibold transition shadow-md">
+                <a href="prof-courses.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl bg-school-green text-white font-semibold transition shadow-md">
                     <span class="text-xl opacity-70 group-hover:opacity-100">📚</span>
                     <span>Courses</span>
                 </a>
 
-                <a href="prof-activities.html" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
+                <a href="prof-activities.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
                     <span class="text-xl opacity-70 group-hover:opacity-100">🏆</span>
                     <span>Activities</span>
                 </a>
 
-                <a href="prof-grades.html" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
+                <a href="prof-grades.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
                     <span class="text-xl opacity-70 group-hover:opacity-100">📊</span>
                     <span>Grades</span>
                 </a>
@@ -75,14 +105,16 @@ $full_name  = $first_name . ' ' . $last_name;
         <div class="mt-8 pt-4 border-t border-gray-200 flex items-center justify-between">
             <div class="flex items-center space-x-3">
                 <div class="w-9 h-9 rounded-full bg-school-gold text-white flex items-center justify-center font-bold font-sans text-sm shadow-sm">
-                    JD
+                    <?= $initials ?>
                 </div>
                 <div>
-                    <h4 class="text-sm font-bold text-school-green leading-tight">Prof Name</h4>
+                    <h4 class="text-sm font-bold text-school-green leading-tight">
+                        <?= $full_name ?>
+                    </h4>
                     <p class="text-xs text-gray-500">Professor Account</p>
                 </div>
             </div>
-            <a href="login.html" title="Log Out" class="text-gray-400 hover:text-red-600 transition p-1 text-lg">
+            <a href="logout.php" title="Log Out" class="text-gray-400 hover:text-red-600 transition p-1 text-lg">
                 🚪
             </a>
         </div>
@@ -129,368 +161,62 @@ $full_name  = $first_name . ' ' . $last_name;
 
         <!-- course gid -->
         <section>
-
             <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
 
-                <!-- course1 -->
-                <div class="bg-[#fcfbf7] rounded-2xl shadow-lg border border-school-gold/20 overflow-hidden hover:shadow-xl transition">
+                <?php if (empty($assigned_courses)): ?>
+                    <div class="col-span-full bg-[#fcfbf7] rounded-2xl p-8 text-center shadow border border-school-gold/20">
+                        <p class="text-gray-500 italic">No courses have been assigned to your instruction profile for this academic semester.</p>
+                    </div>
+                <?php else: ?>
+                    <?php foreach ($assigned_courses as $course): ?>
+                        <div class="bg-[#fcfbf7] rounded-2xl shadow-lg border border-school-gold/20 overflow-hidden hover:shadow-xl transition flex flex-col justify-between">
+                            
+                            <div>
+                                <div class="w-full h-32 bg-school-green/10 flex items-center justify-center text-school-green font-bold text-lg tracking-wider border-b border-school-gold/10 font-sans">
+                                    <?= htmlspecialchars($course['CourseCode']) ?>
+                                </div>
 
-                    <img src="https://www.atlasandboots.com/wp-content/uploads/2019/05/ama-dablam2-most-beautiful-mountains-in-the-world.jpg"
-                        class="w-full h-40 object-cover">
+                                <div class="p-4">
+                                    <p class="text-xs uppercase tracking-wide text-gray-400 font-sans">
+                                        Code: <?= htmlspecialchars($course['CourseCode']) ?>
+                                    </p>
 
-                    <div class="p-4">
+                                    <h3 class="text-md font-bold text-school-green mt-1 line-clamp-2 h-12">
+                                        <?= htmlspecialchars($course['CourseName']) ?>
+                                    </h3>
 
-                        <p class="text-xs uppercase tracking-wide text-gray-400">
-                            Course Code
-                        </p>
+                                    <p class="text-gray-600 mt-2 text-xs font-sans">
+                                        Enrollment Status: 
+                                        <span class="font-semibold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded border border-emerald-200">
+                                            <?= htmlspecialchars($course['Status']) ?>
+                                        </span>
+                                    </p>
+                                </div>
+                            </div>
 
-                        <h3 class="text-lg font-bold text-school-green mt-1">
-                            //course
-                        </h3>
+                            <div class="p-4 pt-0">
+                                <div class="border-t pt-3">
+                                    <p class="text-xs text-gray-500 mb-3 italic">
+                                        Instructor: <?= $full_name ?>
+                                    </p>
 
-                        <p class="text-gray-600 mt-2">
-                            Open
-                        </p>
+                                    <div class="grid grid-cols-2 gap-2">
+                                        <a href="manage-course.php?course_id=<?= $course['Course_ID'] ?>"
+                                        class="text-center bg-school-green text-white py-2 rounded-xl text-xs font-semibold hover:bg-school-green-hover transition shadow-sm">
+                                            Manage
+                                        </a>
 
-                        <div class="border-t mt-4 pt-3">
-
-                            <p class="text-sm text-gray-500 mb-3">
-                            //instructor name
-                            </p>
-
-                                <div class="grid grid-cols-2 gap-2">
-                                    <a href="manage-course.html"
-                                        class="text-center bg-school-green text-white py-2 rounded-xl text-sm font-semibold hover:bg-school-green-hover transition">
-                                        Manage Course
-                                    </a>
-
-                                    <a href="prof-grades.html"
-                                        class="text-center bg-school-gold text-white py-2 rounded-xl text-sm font-semibold hover:opacity-90 transition">
-                                        Grades
-                                    </a>
-
+                                        <a href="prof-grades.php?course_id=<?= $course['Course_ID'] ?>"
+                                        class="text-center bg-school-gold text-white py-2 rounded-xl text-xs font-semibold hover:opacity-90 transition shadow-sm">
+                                            Grades
+                                        </a>
+                                    </div>
+                                </div>
                             </div>
 
                         </div>
-
-                    </div>
-
-                </div>
-
-                <!-- course2 -->
-                <div class="bg-[#fcfbf7] rounded-2xl shadow-lg border border-school-gold/20 overflow-hidden hover:shadow-xl transition">
-
-                    <img src="https://cdn.mos.cms.futurecdn.net/vCKrUWBqRcLFvcoVbaAcyX.jpg"
-                        class="w-full h-40 object-cover">
-
-                    <div class="p-4">
-
-                        <p class="text-xs uppercase tracking-wide text-gray-400">
-                            Course Code
-                        </p>
-
-                        <h3 class="text-lg font-bold text-school-green mt-1">
-                            //course
-                        </h3>
-
-                        <p class="text-gray-600 mt-2">
-                            Open
-                        </p>
-
-                        <div class="border-t mt-4 pt-3">
-
-                            <p class="text-sm text-gray-500 mb-3">
-                            //instructor name
-                            </p>
-
-                                <div class="grid grid-cols-2 gap-2">
-                                    <a href="manage-course.html"
-                                        class="text-center bg-school-green text-white py-2 rounded-xl text-sm font-semibold hover:bg-school-green-hover transition">
-                                        Manage Course
-                                    </a>
-
-                                    <a href="prof-grades.html"
-                                        class="text-center bg-school-gold text-white py-2 rounded-xl text-sm font-semibold hover:opacity-90 transition">
-                                        Grades
-                                    </a>
-
-                            </div>
-
-                        </div>
-
-                    </div>
-
-                </div>
-
-                <!-- course3 -->
-                <div class="bg-[#fcfbf7] rounded-2xl shadow-lg border border-school-gold/20 overflow-hidden hover:shadow-xl transition">
-
-                    <img src="https://i.pinimg.com/736x/28/93/6b/28936b152e42b17f719d82865be83655.jpg"
-                        class="w-full h-40 object-cover">
-
-                    <div class="p-4">
-
-                        <p class="text-xs uppercase tracking-wide text-gray-400">
-                            Course Code
-                        </p>
-
-                        <h3 class="text-lg font-bold text-school-green mt-1">
-                            //course
-                        </h3>
-
-                        <p class="text-gray-600 mt-2">
-                            Open
-                        </p>
-
-                        <div class="border-t mt-4 pt-3">
-
-                            <p class="text-sm text-gray-500 mb-3">
-                            //instructor name
-                            </p>
-
-                                <div class="grid grid-cols-2 gap-2">
-                                    <a href="manage-course.html"
-                                        class="text-center bg-school-green text-white py-2 rounded-xl text-sm font-semibold hover:bg-school-green-hover transition">
-                                        Manage Course
-                                    </a>
-
-                                    <a href="prof-grades.html"
-                                        class="text-center bg-school-gold text-white py-2 rounded-xl text-sm font-semibold hover:opacity-90 transition">
-                                        Grades
-                                    </a>
-
-                            </div>
-
-                        </div>
-
-                    </div>
-
-                </div>
-
-                <!-- course4 -->
-                <div class="bg-[#fcfbf7] rounded-2xl shadow-lg border border-school-gold/20 overflow-hidden hover:shadow-xl transition">
-
-                    <img src="https://i.redd.it/have-you-seen-these-stunning-windows-11-wallpapers-dark-v0-oqk2d8r2uml91.jpg?width=3840&format=pjpg&auto=webp&s=eed168e69760d17e4ad0aff8f5d8ee0739342a92"
-                        class="w-full h-40 object-cover">
-
-                    <div class="p-4">
-
-                        <p class="text-xs uppercase tracking-wide text-gray-400">
-                            Course Code
-                        </p>
-
-                        <h3 class="text-lg font-bold text-school-green mt-1">
-                            //course
-                        </h3>
-
-                        <p class="text-gray-600 mt-2">
-                            Open
-                        </p>
-
-                        <div class="border-t mt-4 pt-3">
-
-                            <p class="text-sm text-gray-500 mb-3">
-                            //instructor name
-                            </p>
-
-                                <div class="grid grid-cols-2 gap-2">
-                                    <a href="manage-course.html"
-                                        class="text-center bg-school-green text-white py-2 rounded-xl text-sm font-semibold hover:bg-school-green-hover transition">
-                                        Manage Course
-                                    </a>
-
-                                    <a href="prof-grades.html"
-                                        class="text-center bg-school-gold text-white py-2 rounded-xl text-sm font-semibold hover:opacity-90 transition">
-                                        Grades
-                                    </a>
-
-                            </div>
-
-                        </div>
-
-                    </div>
-
-                </div>
-
-                <!-- course5 -->
-                <div class="bg-[#fcfbf7] rounded-2xl shadow-lg border border-school-gold/20 overflow-hidden hover:shadow-xl transition">
-
-                    <img src="https://a-static.besthdwallpaper.com/windows-11-scenery-wallpaper-3440x1440-104251_15.jpg"
-                        class="w-full h-40 object-cover">
-
-                    <div class="p-4">
-
-                        <p class="text-xs uppercase tracking-wide text-gray-400">
-                            Course Code
-                        </p>
-
-                        <h3 class="text-lg font-bold text-school-green mt-1">
-                            //course
-                        </h3>
-
-                        <p class="text-gray-600 mt-2">
-                            Open
-                        </p>
-
-                        <div class="border-t mt-4 pt-3">
-
-                            <p class="text-sm text-gray-500 mb-3">
-                            //instructor name
-                            </p>
-
-                                <div class="grid grid-cols-2 gap-2">
-                                    <a href="manage-course.html"
-                                        class="text-center bg-school-green text-white py-2 rounded-xl text-sm font-semibold hover:bg-school-green-hover transition">
-                                        Manage Course
-                                    </a>
-
-                                    <a href="prof-grades.html"
-                                        class="text-center bg-school-gold text-white py-2 rounded-xl text-sm font-semibold hover:opacity-90 transition">
-                                        Grades
-                                    </a>
-
-                            </div>
-
-                        </div>
-
-                    </div>
-
-                </div>
-
-                <!-- course6 -->
-                <div class="bg-[#fcfbf7] rounded-2xl shadow-lg border border-school-gold/20 overflow-hidden hover:shadow-xl transition">
-
-                    <img src="https://glacier.org/wp-content/uploads/2020/10/Glacier-Desktop-Wallpaper-by-Cole-Buckovich-6-scaled.jpg"
-                        class="w-full h-40 object-cover">
-
-                    <div class="p-4">
-
-                        <p class="text-xs uppercase tracking-wide text-gray-400">
-                            Course Code
-                        </p>
-
-                        <h3 class="text-lg font-bold text-school-green mt-1">
-                            //course
-                        </h3>
-
-                        <p class="text-gray-600 mt-2">
-                            Open
-                        </p>
-
-                        <div class="border-t mt-4 pt-3">
-
-                            <p class="text-sm text-gray-500 mb-3">
-                            //instructor name
-                            </p>
-
-                                <div class="grid grid-cols-2 gap-2">
-                                    <a href="manage-course.html"
-                                        class="text-center bg-school-green text-white py-2 rounded-xl text-sm font-semibold hover:bg-school-green-hover transition">
-                                        Manage Course
-                                    </a>
-
-                                    <a href="prof-grades.html"
-                                        class="text-center bg-school-gold text-white py-2 rounded-xl text-sm font-semibold hover:opacity-90 transition">
-                                        Grades
-                                    </a>
-
-                            </div>
-
-                        </div>
-
-                    </div>
-
-                </div>
-
-                <!-- course7 -->
-                <div class="bg-[#fcfbf7] rounded-2xl shadow-lg border border-school-gold/20 overflow-hidden hover:shadow-xl transition">
-
-                    <img src="https://i.pinimg.com/originals/ec/b9/2d/ecb92d18c7855c986a5571c1b6f7cad2.jpg"
-                        class="w-full h-40 object-cover">
-
-                    <div class="p-4">
-
-                        <p class="text-xs uppercase tracking-wide text-gray-400">
-                            Course Code
-                        </p>
-
-                        <h3 class="text-lg font-bold text-school-green mt-1">
-                            //course
-                        </h3>
-
-                        <p class="text-gray-600 mt-2">
-                            Open
-                        </p>
-
-                        <div class="border-t mt-4 pt-3">
-
-                            <p class="text-sm text-gray-500 mb-3">
-                            //instructor name
-                            </p>
-
-                                <div class="grid grid-cols-2 gap-2">
-                                    <a href="manage-course.html"
-                                        class="text-center bg-school-green text-white py-2 rounded-xl text-sm font-semibold hover:bg-school-green-hover transition">
-                                        Manage Course
-                                    </a>
-
-                                    <a href="prof-grades.html"
-                                        class="text-center bg-school-gold text-white py-2 rounded-xl text-sm font-semibold hover:opacity-90 transition">
-                                        Grades
-                                    </a>
-
-                            </div>
-
-                        </div>
-
-                    </div>
-
-                </div>
-
-                <!-- course8 -->
-                <div class="bg-[#fcfbf7] rounded-2xl shadow-lg border border-school-gold/20 overflow-hidden hover:shadow-xl transition">
-
-                    <img src="https://images.pexels.com/photos/3131634/pexels-photo-3131634.jpeg?cs=srgb&dl=pexels-jplenio-3131634.jpg&fm=jpg"
-                        class="w-full h-40 object-cover">
-
-                    <div class="p-4">
-
-                        <p class="text-xs uppercase tracking-wide text-gray-400">
-                            Course Code
-                        </p>
-
-                        <h3 class="text-lg font-bold text-school-green mt-1">
-                            //course
-                        </h3>
-
-                        <p class="text-gray-600 mt-2">
-                            Open
-                        </p>
-
-                        <div class="border-t mt-4 pt-3">
-
-                            <p class="text-sm text-gray-500 mb-3">
-                            //instructor name
-                            </p>
-
-                                <div class="grid grid-cols-2 gap-2">
-                                    <a href="manage-course.html"
-                                        class="text-center bg-school-green text-white py-2 rounded-xl text-sm font-semibold hover:bg-school-green-hover transition">
-                                        Manage Course
-                                    </a>
-
-                                    <a href="prof-grades.html"
-                                        class="text-center bg-school-gold text-white py-2 rounded-xl text-sm font-semibold hover:opacity-90 transition">
-                                        Grades
-                                    </a>
-
-                            </div>
-
-                        </div>
-
-                    </div>
-
-                </div>
+                    <?php endforeach; ?>
+                <?php endif; ?>
 
             </div>
 

@@ -6,6 +6,46 @@ $first_name = htmlspecialchars($_SESSION['first_name']);
 $last_name  = htmlspecialchars($_SESSION['last_name']);
 $initials   = strtoupper(substr($first_name, 0, 1) . substr($last_name, 0, 1));
 $full_name  = $first_name . ' ' . $last_name;
+
+// Define connection parameters locally to isolate configuration dependencies
+$host     = 'localhost';
+$dbname   = 'learningmanagementsystem';
+$username = 'root';
+$password = '';
+
+try {
+    // Re-instantiate the database handler object on the mandatory XAMPP port 3307
+    $pdo = new PDO(
+        "mysql:host=$host;port=3307;dbname=$dbname;charset=utf8",
+        $username,
+        $password,
+        [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
+        ]
+    );
+
+    // 1. Get total course assignments metric counter
+    $count_stmt = $pdo->prepare("SELECT COUNT(*) FROM CourseInstructors WHERE FK_User_ID = :user_id");
+    $count_stmt->execute([':user_id' => $_SESSION['user_id']]);
+    $course_count = $count_stmt->fetchColumn();
+
+    // 2. Extract recent bulletins connected strictly to this teacher's portfolio
+    $ann_stmt = $pdo->prepare("
+        SELECT a.Title, a.Message, a.PostDate, c.CourseCode 
+        FROM Announcements a
+        INNER JOIN Courses c ON a.FK_Course_ID = c.Course_ID
+        INNER JOIN Enrollment e ON c.Course_ID = e.FK_Course_ID
+        WHERE e.FK_User_ID = :user_id
+        ORDER BY a.PostDate DESC 
+        LIMIT 3
+    ");
+    $ann_stmt->execute([':user_id' => $_SESSION['user_id']]);
+    $recent_announcements = $ann_stmt->fetchAll();
+
+} catch (PDOException $e) {
+    die("Error processing dashboard metrics: " . $e->getMessage());
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -99,7 +139,24 @@ $full_name  = $first_name . ' ' . $last_name;
                 <section class="bg-[#fcfbf7] rounded-2xl p-6 shadow-lg border border-school-gold/20">
                     <h3 class="text-xl font-bold text-school-green border-b border-gray-100 pb-3 mb-4">🏫 Institutional Announcements</h3>
                     <!-- Announcements content goes here -->
-                    <p class="text-sm text-gray-400 italic">No announcements at this time.</p>
+                    <?php if (empty($recent_announcements)): ?>
+                            <p class="text-sm text-gray-400 italic">No historical announcements distributed for your assigned courses.</p>
+                        <?php else: ?>
+                            <div class="space-y-4 font-sans">
+                                <?php foreach ($recent_announcements as $announcement): ?>
+                                    <div class="bg-gray-50 p-3 rounded-xl border border-gray-200/60 relative">
+                                        <span class="absolute top-3 right-3 text-[10px] font-bold uppercase tracking-wider bg-school-gold/10 text-school-gold px-2 py-0.5 rounded">
+                                            <?= htmlspecialchars($announcement['CourseCode']) ?>
+                                        </span>
+                                        <h4 class="font-bold text-school-green text-sm pr-16"><?= htmlspecialchars($announcement['Title']) ?></h4>
+                                        <p class="text-xs text-gray-600 mt-1"><?= htmlspecialchars($announcement['Message']) ?></p>
+                                        <span class="text-[10px] text-gray-400 block mt-2">
+                                            📅 <?= date('M d, Y @ h:i A', strtotime($announcement['PostDate'])) ?>
+                                        </span>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                        <?php endif; ?>
                 </section>
 
                 <section class="grid grid-cols-1 sm:grid-cols-2 gap-4">
