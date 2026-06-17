@@ -1,3 +1,57 @@
+<?php
+$required_role = 'Student';
+include 'session_check.php'; // Ensures only logged-in students can view this page
+
+
+// Fetch and sanitize student session details
+$first_name = htmlspecialchars($_SESSION['first_name']);
+$last_name  = htmlspecialchars($_SESSION['last_name']);
+$initials   = strtoupper(substr($first_name, 0, 1) . substr($last_name, 0, 1));
+$full_name  = $first_name . ' ' . $last_name;
+
+$host     = 'localhost';
+$dbname   = 'learningmanagementsystem';
+$username = 'root';   // default XAMPP username
+$password = '';
+try {
+
+$pdo = new PDO(
+        "mysql:host=$host;port=3307;dbname=$dbname;charset=utf8",
+        $username,
+        $password,
+        [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
+        ]
+    );
+    /* SQL LOGIC EXPLAINED:
+       1. We select records from the Courses table (c).
+       2. We INNER JOIN the Enrollment table (e) to map student connections.
+       3. We INNER JOIN the CourseInstructors table (ci) and the Users table (u) 
+          so we can dynamically grab the instructor's name for each course.
+       4. We filter strictly by the logged-in student's User_ID.
+    */
+    $stmt = $pdo->prepare("
+        SELECT 
+            c.Course_ID, 
+            c.CourseCode, 
+            c.CourseName, 
+            c.Status,
+            CONCAT(u.FirstName, ' ', u.LastName) AS InstructorName
+        FROM Courses c
+        INNER JOIN Enrollment e ON c.Course_ID = e.FK_Course_ID
+        LEFT JOIN CourseInstructors ci ON c.Course_ID = ci.FK_Course_ID
+        LEFT JOIN Users u ON ci.FK_User_ID = u.User_ID
+        WHERE e.FK_User_ID = :student_id AND e.EnrollmentStatus = 'Enrolled'
+    ");
+    $stmt->execute([':student_id' => $_SESSION['user_id']]);
+    $enrolled_courses = $stmt->fetchAll();
+} catch (PDOException $e) {
+    die("Error retrieving student enrollment records: " . $e->getMessage());
+}
+?>
+
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -65,14 +119,16 @@
         <div class="mt-8 pt-4 border-t border-gray-200 flex items-center justify-between">
             <div class="flex items-center space-x-3">
                 <div class="w-9 h-9 rounded-full bg-school-gold text-white flex items-center justify-center font-bold font-sans text-sm shadow-sm">
-                    JD
+                    <?= $initials ?>
                 </div>
                 <div>
-                    <h4 class="text-sm font-bold text-school-green leading-tight">John Doe</h4>
+                    <h4 class="text-sm font-bold text-school-green leading-tight">
+                        <?= $full_name ?>
+                    </h4>
                     <p class="text-xs text-gray-500">Student Account</p>
                 </div>
             </div>
-            <a href="login.html" title="Log Out" class="text-gray-400 hover:text-red-600 transition p-1 text-lg">
+            <a href="logout.php" title="Log Out" class="text-gray-400 hover:text-red-600 transition p-1 text-lg">
                 🚪
             </a>
         </div>
@@ -122,245 +178,44 @@
 
             <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
 
-                <!-- course1 -->
-                <div class="bg-[#fcfbf7] rounded-2xl shadow-lg border border-school-gold/20 overflow-hidden hover:shadow-xl transition">
-
-                    <img src="https://www.atlasandboots.com/wp-content/uploads/2019/05/ama-dablam2-most-beautiful-mountains-in-the-world.jpg"
-                        class="w-full h-40 object-cover">
-
-                    <div class="p-4">
-
-                        <p class="text-xs uppercase tracking-wide text-gray-400">
-                            Course Code
-                        </p>
-
-                        <h3 class="text-lg font-bold text-school-green mt-1">
-                            //course
-                        </h3>
-
-                        <p class="text-gray-600 mt-2">
-                            Open
-                        </p>
-
-                        <div class="border-t mt-4 pt-3">
-                            <p class="text-sm text-gray-500">
-                                //instructor name
-                            </p>
-                        </div>
-
+                <?php if (empty($enrolled_courses)): ?>
+                    <div class="col-span-full bg-[#fcfbf7] rounded-2xl p-8 text-center shadow border border-school-gold/20">
+                        <p class="text-gray-500 italic">You are not currently enrolled in any active curriculum streams.</p>
                     </div>
-
-                </div>
-
-                <!-- course2 -->
-                <div class="bg-[#fcfbf7] rounded-2xl shadow-lg border border-school-gold/20 overflow-hidden hover:shadow-xl transition">
-
-                    <img src="https://cdn.mos.cms.futurecdn.net/vCKrUWBqRcLFvcoVbaAcyX.jpg"
-                        class="w-full h-40 object-cover">
-
-                    <div class="p-4">
-
-                        <p class="text-xs uppercase tracking-wide text-gray-400">
-                            Course Code
-                        </p>
-
-                        <h3 class="text-lg font-bold text-school-green mt-1">
-                            //course
-                        </h3>
-
-                        <p class="text-gray-600 mt-2">
-                            Open
-                        </p>
-
-                        <div class="border-t mt-4 pt-3">
-                            <p class="text-sm text-gray-500">
-                                //instructor name
-                            </p>
-                        </div>
-
-                    </div>
-
-                </div>
-
-                <!-- course3 -->
-                <div class="bg-[#fcfbf7] rounded-2xl shadow-lg border border-school-gold/20 overflow-hidden hover:shadow-xl transition">
-
-                    <img src="https://i.pinimg.com/736x/28/93/6b/28936b152e42b17f719d82865be83655.jpg"
-                        class="w-full h-40 object-cover">
-
-                    <div class="p-4">
-
-                        <p class="text-xs uppercase tracking-wide text-gray-400">
-                            Course Code
-                        </p>
-
-                        <h3 class="text-lg font-bold text-school-green mt-1">
-                            //course
-                        </h3>
-
-                        <p class="text-gray-600 mt-2">
-                            Open
-                        </p>
-
-                        <div class="border-t mt-4 pt-3">
-                            <p class="text-sm text-gray-500">
-                                //instructor name
-                            </p>
-                        </div>
-
-                    </div>
-
-                </div>
-
-                <!-- course4 -->
-                <div class="bg-[#fcfbf7] rounded-2xl shadow-lg border border-school-gold/20 overflow-hidden hover:shadow-xl transition">
-
-                    <img src="https://i.redd.it/have-you-seen-these-stunning-windows-11-wallpapers-dark-v0-oqk2d8r2uml91.jpg?width=3840&format=pjpg&auto=webp&s=eed168e69760d17e4ad0aff8f5d8ee0739342a92"
-                        class="w-full h-40 object-cover">
-
-                    <div class="p-4">
-
-                        <p class="text-xs uppercase tracking-wide text-gray-400">
-                            Course Code
-                        </p>
-
-                        <h3 class="text-lg font-bold text-school-green mt-1">
-                            //course
-                        </h3>
-
-                        <p class="text-gray-600 mt-2">
-                            Open
-                        </p>
-
-                        <div class="border-t mt-4 pt-3">
-                            <p class="text-sm text-gray-500">
-                                //instructor name
-                            </p>
-                        </div>
-
-                    </div>
-
-                </div>
-
-                <!-- course5 -->
-                <div class="bg-[#fcfbf7] rounded-2xl shadow-lg border border-school-gold/20 overflow-hidden hover:shadow-xl transition">
-
-                    <img src="https://a-static.besthdwallpaper.com/windows-11-scenery-wallpaper-3440x1440-104251_15.jpg"
-                        class="w-full h-40 object-cover">
-
-                    <div class="p-4">
-
-                        <p class="text-xs uppercase tracking-wide text-gray-400">
-                            Course Code
-                        </p>
-
-                        <h3 class="text-lg font-bold text-school-green mt-1">
-                            //course
-                        </h3>
-
-                        <p class="text-gray-600 mt-2">
-                            Open
-                        </p>
-
-                        <div class="border-t mt-4 pt-3">
-                            <p class="text-sm text-gray-500">
-                                //instructor name
-                            </p>
-                        </div>
-
-                    </div>
-
-                </div>
-
-                <!-- course6 -->
-                <div class="bg-[#fcfbf7] rounded-2xl shadow-lg border border-school-gold/20 overflow-hidden hover:shadow-xl transition">
-
-                    <img src="https://glacier.org/wp-content/uploads/2020/10/Glacier-Desktop-Wallpaper-by-Cole-Buckovich-6-scaled.jpg"
-                        class="w-full h-40 object-cover">
-
-                    <div class="p-4">
-
-                        <p class="text-xs uppercase tracking-wide text-gray-400">
-                            Course Code
-                        </p>
-
-                        <h3 class="text-lg font-bold text-school-green mt-1">
-                            //course
-                        </h3>
-
-                        <p class="text-gray-600 mt-2">
-                            Open
-                        </p>
-
-                        <div class="border-t mt-4 pt-3">
-                            <p class="text-sm text-gray-500">
-                                //instructor name
-                            </p>
-                        </div>
-
-                    </div>
-
-                </div>
-
-                <!-- course7 -->
-                <div class="bg-[#fcfbf7] rounded-2xl shadow-lg border border-school-gold/20 overflow-hidden hover:shadow-xl transition">
-
-                    <img src="https://i.pinimg.com/originals/ec/b9/2d/ecb92d18c7855c986a5571c1b6f7cad2.jpg"
-                        class="w-full h-40 object-cover">
-
-                    <div class="p-4">
-
-                        <p class="text-xs uppercase tracking-wide text-gray-400">
-                            Course Code
-                        </p>
-
-                        <h3 class="text-lg font-bold text-school-green mt-1">
-                            //course
-                        </h3>
-
-                        <p class="text-gray-600 mt-2">
-                            Open
-                        </p>
-
-                        <div class="border-t mt-4 pt-3">
-                            <p class="text-sm text-gray-500">
-                                //instructor name
-                            </p>
-                        </div>
-
-                    </div>
-
-                </div>
-
-                <!-- course8 -->
-                <div class="bg-[#fcfbf7] rounded-2xl shadow-lg border border-school-gold/20 overflow-hidden hover:shadow-xl transition">
-
-                    <img src="https://images.pexels.com/photos/3131634/pexels-photo-3131634.jpeg?cs=srgb&dl=pexels-jplenio-3131634.jpg&fm=jpg"
-                        class="w-full h-40 object-cover">
-
-                    <div class="p-4">
-
-                        <p class="text-xs uppercase tracking-wide text-gray-400">
-                            Course Code
-                        </p>
-
-                        <h3 class="text-lg font-bold text-school-green mt-1">
-                            //course
-                        </h3>
-
-                        <p class="text-gray-600 mt-2">
-                            Open
-                        </p>
-
-                        <div class="border-t mt-4 pt-3">
-                            <p class="text-sm text-gray-500">
-                                //instructor name
-                            </p>
-                        </div>
-
-                    </div>
-
-                </div>
+                <?php else: ?>
+                    <?php foreach ($enrolled_courses as $course): ?>
+                        <a href="view-course.php?course_id=<?= $course['Course_ID'] ?>" class="group block bg-[#fcfbf7] rounded-2xl shadow-lg border border-school-gold/20 overflow-hidden hover:shadow-xl transition flex flex-col justify-between">
+                            
+                            <div>
+                                <div class="w-full h-36 bg-school-green/10 flex items-center justify-center text-school-green font-bold text-lg tracking-wider border-b border-school-gold/10 font-sans group-hover:bg-school-green/15 transition">
+                                    <?= htmlspecialchars($course['CourseCode']) ?>
+                                </div>
+
+                                <div class="p-4">
+                                    <p class="text-xs uppercase tracking-wide text-gray-400 font-sans">
+                                        <?= htmlspecialchars($course['CourseCode']) ?>
+                                    </p>
+
+                                    <h3 class="text-md font-bold text-school-green mt-1 line-clamp-2 h-12 group-hover:text-school-green-light transition">
+                                        <?= htmlspecialchars($course['CourseName']) ?>
+                                    </h3>
+                                </div>
+                            </div>
+
+                            <div class="p-4 pt-0">
+                                <div class="border-t pt-3 flex justify-between items-center text-xs">
+                                    <p class="text-gray-500 italic truncate pr-2">
+                                        🧑‍🏫 <?= htmlspecialchars($course['InstructorName'] ?? 'No Instructor Assigned') ?>
+                                    </p>
+                                    <span class="font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded shrink-0">
+                                        <?= htmlspecialchars($course['Status']) ?>
+                                    </span>
+                                </div>
+                            </div>
+
+                        </a>
+                    <?php endforeach; ?>
+                <?php endif; ?>
 
             </div>
 
