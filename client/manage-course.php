@@ -63,25 +63,25 @@ $full_name  = $first_name . ' ' . $last_name;
 
             <nav class="space-y-2">
 
-                <a href="prof-homepage.php"
+                <a href="prof-homepage.html"
                     class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold">
                     <span>🏛️</span>
                     <span>Institution Home</span>
                 </a>
 
-                <a href="prof-courses-list.php"
+                <a href="prof-courses-list.html"
                     class="flex items-center space-x-3 px-4 py-3 rounded-xl bg-school-green text-white font-semibold">
                     <span>📚</span>
                     <span>Courses</span>
                 </a>
 
-                <a href="prof-activities.php"
+                <a href="prof-activities.html"
                     class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold">
                     <span>🏆</span>
                     <span>Activities</span>
                 </a>
 
-                <a href="prof-grades.php"
+                <a href="prof-grades.html"
                     class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold">
                     <span>📊</span>
                     <span>Grades</span>
@@ -463,7 +463,7 @@ $full_name  = $first_name . ' ' . $last_name;
 
             </div>
 
-            <a href="prof-grades.php"
+            <a href="prof-grades.html"
                 class="bg-school-gold text-white px-6 py-3 rounded-2xl font-semibold hover:opacity-90 transition">
                 Manage Grades →
             </a>
