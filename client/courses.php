@@ -1,7 +1,7 @@
 <?php
 $required_role = 'Student';
 include 'session_check.php'; // Ensures only logged-in students can view this page
-
+include 'db.php';
 
 // Fetch and sanitize student session details
 $first_name = htmlspecialchars($_SESSION['first_name']);
@@ -14,16 +14,6 @@ $dbname   = 'learningmanagementsystem';
 $username = 'root';   // default XAMPP username
 $password = '';
 try {
-
-$pdo = new PDO(
-        "mysql:host=$host;port=3307;dbname=$dbname;charset=utf8",
-        $username,
-        $password,
-        [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
-        ]
-    );
     /* SQL LOGIC EXPLAINED:
        1. We select records from the Courses table (c).
        2. We INNER JOIN the Enrollment table (e) to map student connections.

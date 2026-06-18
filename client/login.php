@@ -1,5 +1,6 @@
 <?php
 session_start();
+include 'db.php';
 
 // --- DB Config ---
 $host     = 'localhost';
@@ -24,23 +25,6 @@ if (empty($email) || empty($password_input)) {
     exit;
 }
 
-try {
-    $pdo = new PDO(
-        "mysql:host=$host;port=3307;dbname=$dbname;charset=utf8",
-        $username,
-        $password,
-        [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
-    );
-} catch (PDOException $e) {
-    // Don't expose DB errors to the user
-    echo "<h1>Database Connection Failed!</h1>";
-    echo "<p><strong>Error Message:</strong> " . $e->getMessage() . "</p>";
-/*
-    error_log('DB Connection failed: ' . $e->getMessage());
-    header('Location: login.html?error=server');
-*/  
-    exit;
-}
 
 // Fetch user by email, join Role to get role name
 $stmt = $pdo->prepare("
