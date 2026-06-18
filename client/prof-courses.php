@@ -2,6 +2,7 @@
 <?php
 $required_role = 'Professor';
 include 'session_check.php'; // Protects page and pulls down session tokens
+include 'db.php';
 
 $first_name = htmlspecialchars($_SESSION['first_name']);
 $last_name  = htmlspecialchars($_SESSION['last_name']);
@@ -15,13 +16,6 @@ $username = 'root';
 $password = '';
 
 try {
-    // Modify port to match your local installation configuration (3306 or 3307)
-    $pdo = new PDO(
-        "mysql:host=$host;port=3307;dbname=$dbname;charset=utf8",
-        $username,
-        $password,
-        [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
-    );
 
     // Query courses explicitly assigned to this specific Professor
     $stmt = $pdo->prepare("

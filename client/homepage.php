@@ -1,6 +1,7 @@
 <?php
 $required_role = 'Student';
 include 'session_check.php';
+include 'db.php';
 
 $first_name = htmlspecialchars($_SESSION['first_name']);
 $last_name  = htmlspecialchars($_SESSION['last_name']);
@@ -14,17 +15,6 @@ $username = 'root';
 $password = '';
 
 try {
-    // Re-instantiate the database handler object on the mandatory XAMPP port 3307
-    $pdo = new PDO(
-        "mysql:host=$host;port=3307;dbname=$dbname;charset=utf8",
-        $username,
-        $password,
-        [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
-        ]
-    );
-
     // 1. Get total course assignments metric counter
     $count_stmt = $pdo->prepare("SELECT COUNT(*) FROM CourseInstructors WHERE FK_User_ID = :user_id");
     $count_stmt->execute([':user_id' => $_SESSION['user_id']]);
