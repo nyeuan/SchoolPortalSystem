@@ -2,13 +2,6 @@
 session_start();
 include 'db.php';
 
-// --- DB Config ---
-$host     = 'localhost';
-$dbname   = 'learningmanagementsystem';
-$username = 'root';   // default XAMPP username
-$password = '';       // default XAMPP password (empty)
-
-
 
 // Only handle POST requests
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
