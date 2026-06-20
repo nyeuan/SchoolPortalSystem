@@ -131,6 +131,8 @@ $error_messages = [
 ];
 $success_msg = $success_messages[$_GET['success'] ?? ''] ?? null;
 $error_msg   = $error_messages[$_GET['error'] ?? ''] ?? null;
+
+$active = 'content';
 ?>
 
 <!DOCTYPE html>
@@ -245,6 +247,8 @@ $error_msg   = $error_messages[$_GET['error'] ?? ''] ?? null;
             </p>
 
         </section>
+
+        <?php include 'course-nav.php'; ?>
 
         <!-- modules -->
         <?php if (empty($modules)): ?>

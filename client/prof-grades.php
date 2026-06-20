@@ -83,6 +83,8 @@ try {
 }
 
 $success_msg = ($_GET['success'] ?? '') === 'grade_saved' ? 'Final grade saved successfully.' : null;
+
+$active = 'coursegrades';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -145,6 +147,8 @@ $success_msg = ($_GET['success'] ?? '') === 'grade_saved' ? 'Final grade saved s
             <h1 class="text-3xl font-bold text-school-green mt-1">📊 Course Grade Management</h1>
 
         </section>
+
+        <?php include 'course-nav.php'; ?>
 
         <section class="bg-[#fcfbf7] rounded-3xl shadow-lg border border-school-gold/20 overflow-hidden">
             <div class="overflow-x-auto">
