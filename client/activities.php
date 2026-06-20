@@ -1,3 +1,53 @@
+<?php
+$required_role = 'Student';
+include 'session_check.php'; // Protects the page and handles security validation
+include 'db.php';
+
+// Fetch session variables for the student user profile identity block
+$first_name = htmlspecialchars($_SESSION['first_name']);
+$last_name  = htmlspecialchars($_SESSION['last_name']);
+$initials   = strtoupper(substr($first_name, 0, 1) . substr($last_name, 0, 1));
+$full_name  = $first_name . ' ' . $last_name;
+$student_id = $_SESSION['user_id'];
+
+try {
+    /* SQL LOGIC EXPLAINED:
+       1. Select required information from Assignments (a).
+       2. Join CourseModule (cm) and Courses (c) to identify the assignment context.
+       3. Inner Join Enrollment (e) to strictly ensure the student is actively registered.
+       4. Left Join Users (u) via CourseInstructors (ci) to dynamically fetch the professor's name.
+       5. Left Join AssignmentSubmission (sub) to see if this specific student has uploaded a submission.
+    */
+    $activities_stmt = $pdo->prepare("
+        SELECT 
+            a.Assignment_ID,
+            a.Title AS ActivityName,
+            a.DueDate,
+            c.Course_ID,
+            c.CourseName,
+            CONCAT(u.FirstName, ' ', u.LastName) AS ProfessorName,
+            sub.AssignmentSubmission_ID AS SubmissionCheck
+        FROM Assignments a
+        INNER JOIN CourseModule cm ON a.FK_CourseModule_ID = cm.CourseModule_ID
+        INNER JOIN Courses c ON cm.FK_Course_ID = c.Course_ID
+        INNER JOIN Enrollment e ON c.Course_ID = e.FK_Course_ID
+        LEFT JOIN CourseInstructors ci ON c.Course_ID = ci.FK_Course_ID
+        LEFT JOIN Users u ON ci.FK_User_ID = u.User_ID
+        LEFT JOIN AssignmentSubmission sub ON a.Assignment_ID = sub.FK_Assignment_ID AND sub.FK_User_ID = :student_id
+        WHERE e.FK_User_ID = :student_id_where AND e.EnrollmentStatus = 'Enrolled'
+        ORDER BY a.DueDate ASC
+    ");
+    
+    $activities_stmt->execute([
+        ':student_id'       => $student_id,
+        ':student_id_where' => $student_id
+    ]);
+    $assigned_activities = $activities_stmt->fetchAll();
+
+} catch (PDOException $e) {
+    die("Error retrieving student activities array log: " . $e->getMessage());
+}
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -64,14 +114,16 @@
         <div class="mt-8 pt-4 border-t border-gray-200 flex items-center justify-between">
             <div class="flex items-center space-x-3">
                 <div class="w-9 h-9 rounded-full bg-school-gold text-white flex items-center justify-center font-bold font-sans text-sm shadow-sm">
-                    JD
+                    <?= $initials ?>
                 </div>
                 <div>
-                    <h4 class="text-sm font-bold text-school-green leading-tight">John Doe</h4>
+                    <h4 class="text-sm font-bold text-school-green leading-tight">
+                        <?= $full_name ?>
+                    </h4>
                     <p class="text-xs text-gray-500">Student Account</p>
                 </div>
             </div>
-            <a href="login.html" title="Log Out" class="text-gray-400 hover:text-red-600 transition p-1 text-lg">
+            <a href="logout.php" title="Log Out" class="text-gray-400 hover:text-red-600 transition p-1 text-lg">
                 🚪
             </a>
         </div>
@@ -88,131 +140,59 @@
         <section>
             <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
 
-                <div class="bg-[#fcfbf7] rounded-2xl shadow-lg border border-school-gold/20 overflow-hidden hover:shadow-xl transition">
-                    <img src="pic ni activity"
-                        class="w-full h-40 object-cover" alt="name ni activity">
-                    <div class="p-4">
-                        <p class="text-xs uppercase tracking-wide text-gray-400">
-                            Course name
-                        </p>
-                        <h3 class="text-lg font-bold text-school-green mt-1">
-                            Activity Name
-                        </h3>
-                        <p class="text-gray-600 mt-2 text-sm">
-                            Status niya
-                        </p>
-                        <div class="border-t mt-4 pt-3">
-                            <p class="text-sm text-gray-500">
-                                name ni prof
-                            </p>
-                        </div>
+                <?php if (empty($assigned_activities)): ?>
+                    <div class="col-span-full bg-[#fcfbf7] rounded-2xl p-10 text-center shadow border border-school-gold/20">
+                        <p class="text-gray-500 italic font-sans">You have no active class activities or deadlines at this time.</p>
                     </div>
-                </div>
+                <?php else: ?>
+                    <?php foreach ($assigned_activities as $activity): ?>
+                        <?php 
+                            // Calculate whether the activity is past its deadline
+                            $is_past_due = (strtotime($activity['DueDate']) < time());
+                            $has_submitted = !empty($activity['SubmissionCheck']);
+                        ?>
+                        <a href="view-course.php?course_id=<?= $activity['Course_ID'] ?>" 
+                        class="group block bg-[#fcfbf7] rounded-2xl shadow-lg border border-school-gold/20 overflow-hidden hover:shadow-xl transition flex flex-col justify-between">
+                            
+                            <div class="p-5 flex flex-col h-full justify-between">
+                                <div>
+                                    <p class="text-[10px] uppercase tracking-wider text-gray-400 font-sans font-bold">
+                                        📚 <?= htmlspecialchars($activity['CourseName']) ?>
+                                    </p>
+                                    
+                                    <h3 class="text-lg font-bold text-school-green mt-1.5 group-hover:text-school-green-light transition line-clamp-2">
+                                        <?= htmlspecialchars($activity['ActivityName']) ?>
+                                    </h3>
+                                    
+                                    <p class="text-xs font-sans text-gray-500 mt-2">
+                                        📅 Due: <span class="font-semibold"><?= date('M d, Y @ h:i A', strtotime($activity['DueDate'])) ?></span>
+                                    </p>
+                                </div>
 
-                 <div class="bg-[#fcfbf7] rounded-2xl shadow-lg border border-school-gold/20 overflow-hidden hover:shadow-xl transition">
-                    <img src="pic ni activity"
-                        class="w-full h-40 object-cover" alt="name ni activity">
-                    <div class="p-4">
-                        <p class="text-xs uppercase tracking-wide text-gray-400">
-                            Course name
-                        </p>
-                        <h3 class="text-lg font-bold text-school-green mt-1">
-                            Activity Name
-                        </h3>
-                        <p class="text-gray-600 mt-2 text-sm">
-                            Status niya
-                        </p>
-                        <div class="border-t mt-4 pt-3">
-                            <p class="text-sm text-gray-500">
-                                name ni prof
-                            </p>
-                        </div>
-                    </div>
-                </div>
+                                <div class="mt-5 pt-3 border-t border-gray-100 flex items-center justify-between font-sans">
+                                    <span class="text-xs font-semibold italic text-gray-500 truncate max-w-[120px]">
+                                        🧑‍🏫 <?= htmlspecialchars($activity['ProfessorName'] ?? 'Staff Assigned') ?>
+                                    </span>
 
-                 <div class="bg-[#fcfbf7] rounded-2xl shadow-lg border border-school-gold/20 overflow-hidden hover:shadow-xl transition">
-                    <img src="pic ni activity"
-                        class="w-full h-40 object-cover" alt="name ni activity">
-                    <div class="p-4">
-                        <p class="text-xs uppercase tracking-wide text-gray-400">
-                            Course name
-                        </p>
-                        <h3 class="text-lg font-bold text-school-green mt-1">
-                            Activity Name
-                        </h3>
-                        <p class="text-gray-600 mt-2 text-sm">
-                            Status niya
-                        </p>
-                        <div class="border-t mt-4 pt-3">
-                            <p class="text-sm text-gray-500">
-                                name ni prof
-                            </p>
-                        </div>
-                    </div>
-                </div>
+                                    <?php if ($has_submitted): ?>
+                                        <span class="text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-xl">
+                                            Passed / Sent
+                                        </span>
+                                    <?php elseif ($is_past_due): ?>
+                                        <span class="text-[11px] font-bold bg-red-50 text-red-600 border border-red-200 px-2.5 py-1 rounded-xl">
+                                            Missed / Due
+                                        </span>
+                                    <?php else: ?>
+                                        <span class="text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-xl animate-pulse">
+                                            Pending
+                                        </span>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        </a>
+                    <?php endforeach; ?>
+                <?php endif; ?>
 
-                 <div class="bg-[#fcfbf7] rounded-2xl shadow-lg border border-school-gold/20 overflow-hidden hover:shadow-xl transition">
-                    <img src="pic ni activity"
-                        class="w-full h-40 object-cover" alt="name ni activity">
-                    <div class="p-4">
-                        <p class="text-xs uppercase tracking-wide text-gray-400">
-                            Course name
-                        </p>
-                        <h3 class="text-lg font-bold text-school-green mt-1">
-                            Activity Name
-                        </h3>
-                        <p class="text-gray-600 mt-2 text-sm">
-                            Status niya
-                        </p>
-                        <div class="border-t mt-4 pt-3">
-                            <p class="text-sm text-gray-500">
-                                name ni prof
-                            </p>
-                        </div>
-                    </div>
-                </div>
-
-                 <div class="bg-[#fcfbf7] rounded-2xl shadow-lg border border-school-gold/20 overflow-hidden hover:shadow-xl transition">
-                    <img src="pic ni activity"
-                        class="w-full h-40 object-cover" alt="name ni activity">
-                    <div class="p-4">
-                        <p class="text-xs uppercase tracking-wide text-gray-400">
-                            Course name
-                        </p>
-                        <h3 class="text-lg font-bold text-school-green mt-1">
-                            Activity Name
-                        </h3>
-                        <p class="text-gray-600 mt-2 text-sm">
-                            Status niya
-                        </p>
-                        <div class="border-t mt-4 pt-3">
-                            <p class="text-sm text-gray-500">
-                                name ni prof
-                            </p>
-                        </div>
-                    </div>
-                </div>
-
-                 <div class="bg-[#fcfbf7] rounded-2xl shadow-lg border border-school-gold/20 overflow-hidden hover:shadow-xl transition">
-                    <img src="pic ni activity"
-                        class="w-full h-40 object-cover" alt="name ni activity">
-                    <div class="p-4">
-                        <p class="text-xs uppercase tracking-wide text-gray-400">
-                            Course name
-                        </p>
-                        <h3 class="text-lg font-bold text-school-green mt-1">
-                            Activity Name
-                        </h3>
-                        <p class="text-gray-600 mt-2 text-sm">
-                            Status niya
-                        </p>
-                        <div class="border-t mt-4 pt-3">
-                            <p class="text-sm text-gray-500">
-                                name ni prof
-                            </p>
-                        </div>
-                    </div>
-                </div>
             </div>
         </section>
 
