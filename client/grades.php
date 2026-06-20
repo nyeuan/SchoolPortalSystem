@@ -33,9 +33,6 @@ try {
     die("Error assembling student academic history mapping parameters: " . $e->getMessage());
 }
 
-$course_id= null;
-$active = 'grades';
-
 /**
  * Maps numerical percentage scores to descriptive letter symbols matching institutional practices.
  */
@@ -141,8 +138,6 @@ function determineLetterGrade($grade) {
                 Academic Report
             </h1>
         </section>
-        
-        <?php include 'course-nav.php'; ?>
 
         <section class="bg-[#fcfbf7] rounded-2xl shadow-lg border border-school-gold/20 overflow-hidden">
             <div class="overflow-x-auto">
