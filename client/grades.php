@@ -139,10 +139,17 @@ function determineLetterGrade($grade) {
 
     <main class="flex-1 p-4 sm:p-8 overflow-y-auto max-w-7xl mx-auto w-full">
 
-        <section class="bg-[#fcfbf7] rounded-2xl p-6 shadow-lg border border-school-gold/20 mb-6">
-            <h1 class="text-3xl font-bold tracking-wide text-school-green">
-                Academic Report
-            </h1>
+        <section class="bg-[#fcfbf7] rounded-2xl p-6 shadow-lg border border-school-gold/20 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+                <h1 class="text-3xl font-bold tracking-wide text-school-green">
+                    Academic Report
+                </h1>
+            </div>
+            <div class="shrink-0 w-full sm:w-auto">
+                <a href="download-grades.php" class="w-full text-center inline-block bg-school-gold hover:opacity-90 text-white font-sans font-bold text-xs px-5 py-3.5 rounded-xl shadow-md transition duration-150">
+                    💼 Export PDF (via XML-SOAP Service Engine)
+                </a>
+            </div>
         </section>
 
         <section class="bg-[#fcfbf7] rounded-2xl shadow-lg border border-school-gold/20 overflow-hidden">

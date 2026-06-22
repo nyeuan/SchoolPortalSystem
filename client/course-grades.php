@@ -200,6 +200,7 @@ $active = 'coursegrades';
         <!-- final grade summary -->
         <section class="bg-[#fcfbf7] rounded-3xl p-6 shadow-lg border border-school-gold/20 mb-6">
             <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-4 font-sans">
+                
                 <div>
                     <h2 class="text-xl font-bold text-school-green mb-1">Final Grade</h2>
                     <p class="text-xs text-gray-400">
