@@ -119,6 +119,12 @@ $active = 'coursegrades';
                 <a href="prof-courses.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl bg-school-green text-white font-semibold transition shadow-md">
                     <span>📚</span><span>Courses</span>
                 </a>
+
+                <a href="Account-info.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
+                    <span class="text-xl opacity-70 group-hover:opacity-100">👤</span>
+                    <span>Account</span>
+                </a>
+                
             </nav>
         </div>
         <div class="mt-8 pt-4 border-t border-gray-200 flex items-center justify-between">
