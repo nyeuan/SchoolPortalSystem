@@ -16,6 +16,7 @@ try {
     */
     $grades_stmt = $pdo->prepare("
         SELECT 
+            c.Course_ID,
             c.CourseCode,
             c.CourseName,
             cg.FinalGrade,
@@ -172,7 +173,7 @@ function determineLetterGrade($grade) {
                                         $remark_color = ($row['Remarks'] === 'Passed') ? 'text-emerald-700' : 'text-red-600';
                                     }
                                 ?>
-                                <tr class="hover:bg-school-green/5 transition">
+                                <tr onclick="window.location='course-grades.php?course_id=<?= $row['Course_ID'] ?>';" class="hover:bg-school-green/5 cursor-pointer transition">
                                     <td class="py-4 px-6 font-bold text-school-green font-sans">
                                         <?= htmlspecialchars($row['CourseCode']) ?>
                                     </td>

@@ -208,6 +208,9 @@ $active = 'content';
 
     <!-- main content -->
     <main class="flex-1 p-4 sm:p-8 overflow-y-auto max-w-6xl mx-auto w-full">
+        <a href="prof-courses.php" class="inline-flex items-center text-sm text-white/90 hover:text-white mb-4 font-sans font-medium">
+            ← Back to Courses
+        </a>
 
         <?php if ($success_msg): ?>
             <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl px-5 py-3 mb-4 text-sm font-sans">
@@ -428,30 +431,6 @@ $active = 'content';
 
         <?php endif; ?>
 
-        <!-- grades -->
-        <section class="bg-[#fcfbf7] rounded-3xl p-6 shadow-lg border border-school-gold/20">
-
-            <div class="flex justify-between items-center">
-
-                <div>
-
-                    <h2 class="text-2xl font-bold text-school-green">
-                        📊 Grades
-                    </h2>
-
-                    <p class="text-gray-500">
-                        Redirect to grades page for this course.
-                    </p>
-                </div>
-
-                <a href="prof-grades.php?course_id=<?= $course_id ?>"
-                    class="bg-school-gold text-white px-6 py-3 rounded-2xl font-semibold hover:opacity-90 transition">
-                    Manage Grades →
-                </a>
-
-            </div>
-
-        </section>
 
     </main>
 
