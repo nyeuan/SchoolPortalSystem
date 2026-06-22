@@ -23,7 +23,7 @@ $valid_statuses = ['Present', 'Late', 'Absent'];
 try {
     // Confirm this professor actually teaches the course before writing anything
     $auth_stmt = $pdo->prepare("
-        SELECT Course_ID
+        SELECT CourseInstructors_ID
         FROM CourseInstructors
         WHERE FK_Course_ID = :course_id AND FK_User_ID = :user_id
     ");

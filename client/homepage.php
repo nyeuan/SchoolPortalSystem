@@ -114,6 +114,11 @@ try {
                     <span class="text-xl opacity-70 group-hover:opacity-100">📊</span>
                     <span>Grades</span>
                 </a>
+
+                <a href="Account-info.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
+                    <span class="text-xl opacity-70 group-hover:opacity-100">👤</span>
+                    <span>Account</span>
+                </a>
             </nav>
         </div>
 
@@ -195,7 +200,7 @@ try {
                     <h3 class="text-lg font-bold text-school-green border-b border-gray-100 pb-2 mb-3">⚡ Quick Portal Access</h3>
                     <div class="grid grid-cols-1 gap-2.5 font-sans">
                         <a href="courses.php" class="p-3 bg-gray-50 rounded-xl hover:bg-school-green/5 border border-gray-200 hover:border-school-green/20 transition flex justify-between items-center text-sm font-medium">
-                            <span>Open My Course Syllabus</span>
+                            <span>Open Enrolled Courses</span>
                             <span class="text-school-green">→</span>
                         </a>
                         <a href="activities.php" class="p-3 bg-gray-50 rounded-xl hover:bg-school-green/5 border border-gray-200 hover:border-school-green/20 transition flex justify-between items-center text-sm font-medium">

@@ -30,9 +30,16 @@ $stmt = $pdo->prepare("
 $stmt->execute([':email' => $email]);
 $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-// Check user exists and password matches
-    // replace with password_verify() when passwords are hashed in the database !password_verify($password_input, $user['PasswordHash']))
-if (!$user || $password_input != $user['PasswordHash']) {
+// CHANGE: Integrated password verification tracking with backward compatibility fallback
+if (!$user) {
+    header('Location: login.html?error=invalid');
+    exit;
+}
+
+// Check via password_verify() first (for hashed values). Fall back to plaintext string comparison if false.
+$is_valid_password = password_verify($password_input, $user['PasswordHash']) || ($password_input === $user['PasswordHash']);
+
+if (!$is_valid_password) {
     header('Location: login.html?error=invalid');
     exit;
 }

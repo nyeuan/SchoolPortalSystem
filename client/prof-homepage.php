@@ -21,6 +21,18 @@ try {
     $count_stmt->execute([':user_id' => $_SESSION['user_id']]);
     $course_count = $count_stmt->fetchColumn();
 
+    // CHANGE: Added dynamic tracking query for student submissions needing evaluation
+    $ungraded_stmt = $pdo->prepare("
+        SELECT COUNT(*) 
+        FROM AssignmentSubmission sub
+        INNER JOIN Assignments a ON sub.FK_Assignment_ID = a.Assignment_ID
+        INNER JOIN CourseModule cm ON a.FK_CourseModule_ID = cm.CourseModule_ID
+        INNER JOIN CourseInstructors ci ON cm.FK_Course_ID = ci.FK_Course_ID
+        WHERE ci.FK_User_ID = :user_id AND sub.Score IS NULL
+    ");
+    $ungraded_stmt->execute([':user_id' => $_SESSION['user_id']]);
+    $ungraded_submissions_count = $ungraded_stmt->fetchColumn();
+
     // 2. Extract recent bulletins connected strictly to this teacher's portfolio
     $ann_stmt = $pdo->prepare("
         SELECT a.Title, a.Message, a.PostDate, c.CourseCode 
@@ -87,21 +99,26 @@ try {
                     <span>Courses</span>
                 </a>
 
-              
+                <a href="Account-info.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
+                    <span class="text-xl opacity-70 group-hover:opacity-100">👤</span>
+                    <span>Account</span>
+                </a>
             </nav>
         </div>
 
         <div class="mt-8 pt-4 border-t border-gray-200 flex items-center justify-between">
             <div class="flex items-center space-x-3">
                 <div class="w-9 h-9 rounded-full bg-school-gold text-white flex items-center justify-center font-bold font-sans text-sm shadow-sm">
-                    JD
+                    <?= $initials ?>
                 </div>
                 <div>
-                    <h4 class="text-sm font-bold text-school-green leading-tight">Prof Name</h4>
+                    <h4 class="text-sm font-bold text-school-green leading-tight">
+                        <?= $full_name ?>
+                    </h4>
                     <p class="text-xs text-gray-500">Professor Account</p>
                 </div>
             </div>
-            <a href="login.html" title="Log Out" class="text-gray-400 hover:text-red-600 transition p-1 text-lg">
+            <a href="logout.php" title="Log Out" class="text-gray-400 hover:text-red-600 transition p-1 text-lg">
                 🚪
             </a>
         </div>
@@ -150,17 +167,16 @@ try {
                     <div class="bg-[#fcfbf7] p-5 rounded-2xl shadow-md border border-school-gold/10 flex items-center space-x-4">
                         <div class="p-3 bg-school-green/10 rounded-xl text-2xl">📚</div>
                         <div>
-                            <h4 class="text-xs font-sans uppercase text-gray-400 tracking-wider font-semibold">Active Enrolled Courses</h4>
-                            <p class="text-3xl font-bold text-school-green mt-1 font-sans"><?= $course_count ?></p>
+                            <h4 class="text-xs font-sans uppercase text-gray-400 tracking-wider font-semibold">Assigned Courses Taught</h4>
+                            <p class="text-2xl font-bold text-school-green mt-1 font-sans"><?= (int)$course_count ?></p>
                         </div>
                     </div>
+                    
                     <div class="bg-[#fcfbf7] p-5 rounded-2xl shadow-md border border-school-gold/10 flex items-center space-x-4">
-                        <div class="p-3 bg-school-gold/10 rounded-xl text-2xl">📝</div>
+                        <div class="p-3 bg-school-gold/10 rounded-xl text-2xl">✍️</div>
                         <div>
-                            <h4 class="text-xs font-sans uppercase text-gray-400 tracking-wider font-semibold">Pending Activities Due</h4>
-                            
-                            //laman ni activities
-
+                            <h4 class="text-xs font-sans uppercase text-gray-400 tracking-wider font-semibold">Submissions To Grade</h4>
+                            <p class="text-2xl font-bold text-school-green mt-1 font-sans"><?= (int)$ungraded_submissions_count ?></p>
                         </div>
                     </div>
                 </section>
@@ -170,16 +186,12 @@ try {
                 <section class="bg-[#fcfbf7] rounded-2xl p-6 shadow-lg border border-school-gold/20">
                     <h3 class="text-lg font-bold text-school-green border-b border-gray-100 pb-2 mb-3">⚡ Quick Portal Access</h3>
                     <div class="grid grid-cols-1 gap-2.5 font-sans">
-                        <a href="courses.php" class="p-3 bg-gray-50 rounded-xl hover:bg-school-green/5 border border-gray-200 hover:border-school-green/20 transition flex justify-between items-center text-sm font-medium">
-                            <span>Open My Course Syllabus</span>
+                        <a href="prof-courses.php" class="p-3 bg-gray-50 rounded-xl hover:bg-school-green/5 border border-gray-200 hover:border-school-green/20 transition flex justify-between items-center text-sm font-medium">
+                            <span>Manage Assigned Courses</span>
                             <span class="text-school-green">→</span>
                         </a>
-                        <a href="activities.php" class="p-3 bg-gray-50 rounded-xl hover:bg-school-green/5 border border-gray-200 hover:border-school-green/20 transition flex justify-between items-center text-sm font-medium">
-                            <span>View Calendar Deadlines</span>
-                            <span class="text-school-green">→</span>
-                        </a>
-                        <a href="grades.php" class="p-3 bg-gray-50 rounded-xl hover:bg-school-green/5 border border-gray-200 hover:border-school-green/20 transition flex justify-between items-center text-sm font-medium">
-                            <span>Check Report Card History</span>
+                        <a href="Account-info.php" class="p-3 bg-gray-50 rounded-xl hover:bg-school-green/5 border border-gray-200 hover:border-school-green/20 transition flex justify-between items-center text-sm font-medium">
+                            <span>Update Profile Settings</span>
                             <span class="text-school-green">→</span>
                         </a>
                     </div>

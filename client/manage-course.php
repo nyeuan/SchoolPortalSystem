@@ -161,7 +161,10 @@ $active = 'content';
                     <span>Courses</span>
                 </a>
 
-                
+                <a href="Account-info.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
+                    <span class="text-xl opacity-70 group-hover:opacity-100">👤</span>
+                    <span>Account</span>
+                </a>
 
             </nav>
 
