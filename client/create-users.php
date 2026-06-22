@@ -1,6 +1,6 @@
 <?php
 
-include 'db_connect.php';
+include 'db.php';
 
 if(isset($_POST['create'])) {
 
