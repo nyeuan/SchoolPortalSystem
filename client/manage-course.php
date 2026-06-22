@@ -161,17 +161,7 @@ $active = 'content';
                     <span>Courses</span>
                 </a>
 
-                <a href="prof-activities.php"
-                    class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold">
-                    <span>🏆</span>
-                    <span>Activities</span>
-                </a>
-
-                <a href="prof-grades.php"
-                    class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold">
-                    <span>📊</span>
-                    <span>Grades</span>
-                </a>
+                
 
             </nav>
 

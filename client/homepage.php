@@ -7,6 +7,7 @@ $first_name = htmlspecialchars($_SESSION['first_name']);
 $last_name  = htmlspecialchars($_SESSION['last_name']);
 $initials   = strtoupper(substr($first_name, 0, 1) . substr($last_name, 0, 1));
 $full_name  = $first_name . ' ' . $last_name;
+$student_id = $_SESSION['user_id'];
 
 // Define connection parameters locally to isolate configuration dependencies
 $host     = 'localhost';
@@ -15,22 +16,44 @@ $username = 'root';
 $password = '';
 
 try {
-    // 1. Get total course assignments metric counter
-    $count_stmt = $pdo->prepare("SELECT COUNT(*) FROM CourseInstructors WHERE FK_User_ID = :user_id");
-    $count_stmt->execute([':user_id' => $_SESSION['user_id']]);
-    $course_count = $count_stmt->fetchColumn();
+    // 1. Get total active enrolled courses for this student
+    $course_count_stmt = $pdo->prepare("
+        SELECT COUNT(*) 
+        FROM Enrollment 
+        WHERE FK_User_ID = :user_id AND EnrollmentStatus = 'Enrolled'
+    ");
+    $course_count_stmt->execute([':user_id' => $student_id]);
+    $course_count = $course_count_stmt->fetchColumn();
 
-    // 2. Extract recent bulletins connected strictly to this teacher's portfolio
+    // 2. Get total pending activities due (enrolled courses, not submitted, not past due)
+    $pending_count_stmt = $pdo->prepare("
+        SELECT COUNT(*) 
+        FROM Assignments a
+        INNER JOIN CourseModule cm ON a.FK_CourseModule_ID = cm.CourseModule_ID
+        INNER JOIN Enrollment e ON cm.FK_Course_ID = e.FK_Course_ID
+        LEFT JOIN AssignmentSubmission sub ON a.Assignment_ID = sub.FK_Assignment_ID AND sub.FK_User_ID = :user_id_sub
+        WHERE e.FK_User_ID = :user_id 
+          AND e.EnrollmentStatus = 'Enrolled'
+          AND sub.AssignmentSubmission_ID IS NULL
+          AND a.DueDate >= NOW()
+    ");
+    $pending_count_stmt->execute([
+        ':user_id'     => $student_id,
+        ':user_id_sub' => $student_id
+    ]);
+    $pending_activities_count = $pending_count_stmt->fetchColumn();
+
+    // 3. Extract recent bulletins connected strictly to this student's courses
     $ann_stmt = $pdo->prepare("
         SELECT a.Title, a.Message, a.PostDate, c.CourseCode 
         FROM Announcements a
         INNER JOIN Courses c ON a.FK_Course_ID = c.Course_ID
         INNER JOIN Enrollment e ON c.Course_ID = e.FK_Course_ID
-        WHERE e.FK_User_ID = :user_id
+        WHERE e.FK_User_ID = :user_id AND e.EnrollmentStatus = 'Enrolled'
         ORDER BY a.PostDate DESC 
         LIMIT 3
     ");
-    $ann_stmt->execute([':user_id' => $_SESSION['user_id']]);
+    $ann_stmt->execute([':user_id' => $student_id]);
     $recent_announcements = $ann_stmt->fetchAll();
 
 } catch (PDOException $e) {
@@ -154,16 +177,14 @@ try {
                         <div class="p-3 bg-school-green/10 rounded-xl text-2xl">📚</div>
                         <div>
                             <h4 class="text-xs font-sans uppercase text-gray-400 tracking-wider font-semibold">Active Enrolled Courses</h4>
-                            <!-- Course count goes here -->
-                            <p class="text-2xl font-bold text-school-green mt-1">—</p>
+                            <p class="text-2xl font-bold text-school-green mt-1 font-sans"><?= (int)$course_count ?></p>
                         </div>
                     </div>
                     <div class="bg-[#fcfbf7] p-5 rounded-2xl shadow-md border border-school-gold/10 flex items-center space-x-4">
                         <div class="p-3 bg-school-gold/10 rounded-xl text-2xl">📝</div>
                         <div>
                             <h4 class="text-xs font-sans uppercase text-gray-400 tracking-wider font-semibold">Pending Activities Due</h4>
-                            <!-- Activities count goes here -->
-                            <p class="text-2xl font-bold text-school-green mt-1">—</p>
+                            <p class="text-2xl font-bold text-school-green mt-1 font-sans"><?= (int)$pending_activities_count ?></p>
                         </div>
                     </div>
                 </section>
