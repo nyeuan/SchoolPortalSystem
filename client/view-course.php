@@ -131,6 +131,8 @@ $error_messages = [
 ];
 $success_msg = $success_messages[$_GET['success'] ?? ''] ?? null;
 $error_msg   = $error_messages[$_GET['error'] ?? ''] ?? null;
+
+$active = 'content';
 ?>
 
 <!DOCTYPE html>
@@ -245,6 +247,8 @@ $error_msg   = $error_messages[$_GET['error'] ?? ''] ?? null;
             </p>
 
         </section>
+
+        <?php include 'course-nav.php'; ?>
 
         <!-- modules -->
         <?php if (empty($modules)): ?>
@@ -397,11 +401,11 @@ $error_msg   = $error_messages[$_GET['error'] ?? ''] ?? null;
                                                         </p>
 
                                                         <?php if (!$is_past_due): ?>
-                                                            <button type="button"
-                                                                onclick="openSubmitModal(<?= $a_id ?>, '<?= htmlspecialchars($assignment['Title'], ENT_QUOTES) ?>', true)"
+                                                            <a href="submit-assignment.php?assignment_id=<?= $a_id ?>&course_id=<?= $course_id ?>"
+                                                                target="_blank" rel="noopener"
                                                                 class="text-xs font-semibold text-school-green hover:underline">
-                                                                Replace Submission
-                                                            </button>
+                                                                Replace Submission ↗
+                                                            </a>
                                                         <?php endif; ?>
                                                     </div>
 
@@ -411,11 +415,11 @@ $error_msg   = $error_messages[$_GET['error'] ?? ''] ?? null;
 
                                                 <?php else: ?>
 
-                                                    <button type="button"
-                                                        onclick="openSubmitModal(<?= $a_id ?>, '<?= htmlspecialchars($assignment['Title'], ENT_QUOTES) ?>', false)"
-                                                        class="bg-school-green text-white px-4 py-2 rounded-xl text-xs font-semibold hover:bg-school-green-hover transition">
-                                                        Submit Assignment
-                                                    </button>
+                                                    <a href="submit-assignment.php?assignment_id=<?= $a_id ?>&course_id=<?= $course_id ?>"
+                                                       
+                                                        class="inline-block bg-school-green text-white px-4 py-2 rounded-xl text-xs font-semibold hover:bg-school-green-hover transition">
+                                                        Submit Assignment ↗
+                                                    </a>
 
                                                 <?php endif; ?>
 
@@ -439,39 +443,9 @@ $error_msg   = $error_messages[$_GET['error'] ?? ''] ?? null;
 
     </main>
 
-    <!-- Submit Assignment Modal -->
-    <div id="submitAssignmentModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
-        <div class="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl font-sans">
-            <h3 id="submitModalTitle" class="text-xl font-bold text-school-green mb-1">Submit Assignment</h3>
-            <p id="submitModalSubtitle" class="text-sm text-gray-500 mb-4"></p>
-
-            <form action="submit-assignment.php" method="POST" enctype="multipart/form-data">
-                <input type="hidden" name="course_id" value="<?= $course_id ?>">
-                <input type="hidden" name="assignment_id" id="submitAssignmentId" value="">
-
-                <label class="block text-sm font-semibold text-gray-600 mb-1">Your File</label>
-                <input type="file" name="submission_file" required
-                    class="w-full border border-gray-300 rounded-xl px-4 py-2 mb-1">
-                <p id="submitReplaceNote" class="text-xs text-gray-400 mb-4 hidden">Uploading a new file will replace your previous submission.</p>
-
-                <div class="flex justify-end gap-3 mt-2">
-                    <button type="button" onclick="document.getElementById('submitAssignmentModal').classList.add('hidden')"
-                        class="px-4 py-2 rounded-xl text-gray-500 hover:bg-gray-100">Cancel</button>
-                    <button type="submit"
-                        class="bg-school-green text-white px-5 py-2 rounded-xl font-semibold hover:bg-school-green-hover">Submit</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
     <script>
-        function openSubmitModal(assignmentId, title, isReplace) {
-            document.getElementById('submitAssignmentId').value = assignmentId;
-            document.getElementById('submitModalTitle').textContent = isReplace ? 'Replace Submission' : 'Submit Assignment';
-            document.getElementById('submitModalSubtitle').textContent = title;
-            document.getElementById('submitReplaceNote').classList.toggle('hidden', !isReplace);
-            document.getElementById('submitAssignmentModal').classList.remove('hidden');
-        }
+        // Submission now happens on a dedicated page (submit-assignment.php),
+        // opened in a new tab from the "Submit Assignment" / "Replace Submission" links above.
     </script>
 
 </body>

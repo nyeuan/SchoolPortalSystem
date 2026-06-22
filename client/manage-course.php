@@ -56,10 +56,13 @@ try {
         }
 
         $assignments_stmt = $pdo->prepare("
-            SELECT Assignment_ID, Title, Description, DueDate, MaxScore, AttachmentName, AttachmentPath, FK_CourseModule_ID
-            FROM Assignments
-            WHERE FK_CourseModule_ID IN ($placeholders)
-            ORDER BY DueDate ASC
+            SELECT a.Assignment_ID, a.Title, a.Description, a.DueDate, a.MaxScore,
+                   a.AttachmentName, a.AttachmentPath, a.FK_CourseModule_ID,
+                   (SELECT COUNT(*) FROM AssignmentSubmission s WHERE s.FK_Assignment_ID = a.Assignment_ID) AS SubmissionCount,
+                   (SELECT COUNT(*) FROM AssignmentSubmission s WHERE s.FK_Assignment_ID = a.Assignment_ID AND s.Score IS NOT NULL) AS GradedCount
+            FROM Assignments a
+            WHERE a.FK_CourseModule_ID IN ($placeholders)
+            ORDER BY a.DueDate ASC
         ");
         $assignments_stmt->execute($module_ids);
         foreach ($assignments_stmt->fetchAll() as $assignment) {
@@ -73,17 +76,22 @@ try {
 
 // Simple banners driven by redirect query params from the action handlers
 $success_messages = [
-    'module_added'     => 'Module added successfully.',
-    'material_added'   => 'Learning material uploaded successfully.',
-    'assignment_added' => 'Assignment created successfully.',
+    'module_added'        => 'Module added successfully.',
+    'material_added'      => 'Learning material uploaded successfully.',
+    'assignment_added'    => 'Assignment created successfully.',
+    'assignment_updated'  => 'Assignment updated successfully.',
+    'assignment_deleted'  => 'Assignment deleted successfully.',
 ];
 $error_messages = [
     'missing_fields'    => 'Please fill in all required fields.',
     'upload_failed'     => 'The file upload failed. Please try again.',
     'invalid_file_type' => 'That file type is not allowed.',
+    'not_authorized'    => 'You are not authorized to modify that assignment.',
 ];
 $success_msg = $success_messages[$_GET['success'] ?? ''] ?? null;
 $error_msg   = $error_messages[$_GET['error'] ?? ''] ?? null;
+
+$active = 'content';
 ?>
 
 <!DOCTYPE html>
@@ -153,17 +161,7 @@ $error_msg   = $error_messages[$_GET['error'] ?? ''] ?? null;
                     <span>Courses</span>
                 </a>
 
-                <a href="prof-activities.php"
-                    class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold">
-                    <span>🏆</span>
-                    <span>Activities</span>
-                </a>
-
-                <a href="prof-grades.php"
-                    class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold">
-                    <span>📊</span>
-                    <span>Grades</span>
-                </a>
+                
 
             </nav>
 
@@ -200,6 +198,9 @@ $error_msg   = $error_messages[$_GET['error'] ?? ''] ?? null;
 
     <!-- main content -->
     <main class="flex-1 p-4 sm:p-8 overflow-y-auto max-w-6xl mx-auto w-full">
+        <a href="prof-courses.php" class="inline-flex items-center text-sm text-white/90 hover:text-white mb-4 font-sans font-medium">
+            ← Back to Courses
+        </a>
 
         <?php if ($success_msg): ?>
             <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl px-5 py-3 mb-4 text-sm font-sans">
@@ -237,6 +238,8 @@ $error_msg   = $error_messages[$_GET['error'] ?? ''] ?? null;
             </div>
 
         </section>
+
+        <?php include 'course-nav.php'; ?>
 
         <!-- modules -->
         <?php if (empty($modules)): ?>
@@ -350,25 +353,56 @@ $error_msg   = $error_messages[$_GET['error'] ?? ''] ?? null;
 
                                 <div class="space-y-2">
                                     <?php foreach ($mod_assignments as $assignment): ?>
-                                        <div class="flex justify-between items-center border rounded-xl p-4 bg-white">
+                                        <div class="border rounded-xl p-4 bg-white">
 
-                                            <div class="font-sans">
-                                                <p class="font-semibold text-school-green">
-                                                    📝 <?= htmlspecialchars($assignment['Title']) ?>
-                                                </p>
-                                                <p class="text-xs text-gray-500 mt-0.5">
-                                                    Due <?= date('M d, Y @ h:i A', strtotime($assignment['DueDate'])) ?> · Max Score: <?= htmlspecialchars($assignment['MaxScore']) ?>
-                                                </p>
-                                                <?php if (!empty($assignment['AttachmentPath'])): ?>
-                                                    <a href="<?= htmlspecialchars($assignment['AttachmentPath']) ?>" target="_blank"
-                                                       class="text-xs text-blue-600 hover:underline">
-                                                        📎 <?= htmlspecialchars($assignment['AttachmentName']) ?>
-                                                    </a>
-                                                <?php endif; ?>
+                                            <div class="flex justify-between items-start gap-4 font-sans">
+
+                                                <div class="min-w-0">
+                                                    <p class="font-semibold text-school-green">
+                                                        📝 <?= htmlspecialchars($assignment['Title']) ?>
+                                                    </p>
+                                                    <p class="text-xs text-gray-500 mt-0.5">
+                                                        Due <?= date('M d, Y @ h:i A', strtotime($assignment['DueDate'])) ?> · Max Score: <?= htmlspecialchars($assignment['MaxScore']) ?>
+                                                    </p>
+                                                    <p class="text-xs text-gray-400 mt-0.5">
+                                                        <?= (int)$assignment['SubmissionCount'] ?> submission<?= $assignment['SubmissionCount'] == 1 ? '' : 's' ?>
+                                                        · <?= (int)$assignment['GradedCount'] ?> graded
+                                                    </p>
+                                                    <?php if (!empty($assignment['AttachmentPath'])): ?>
+                                                        <a href="<?= htmlspecialchars($assignment['AttachmentPath']) ?>" target="_blank"
+                                                           class="text-xs text-blue-600 hover:underline">
+                                                            📎 <?= htmlspecialchars($assignment['AttachmentName']) ?>
+                                                        </a>
+                                                    <?php endif; ?>
+                                                </div>
+
                                             </div>
 
-                                            <div>
-                                                <span class="text-xs text-gray-400 font-sans">View only</span>
+                                            <div class="flex flex-wrap gap-2 mt-3 border-t pt-3 font-sans">
+                                                <a href="grade-submissions.php?assignment_id=<?= $assignment['Assignment_ID'] ?>"
+                                                    class="text-xs font-semibold bg-school-gold text-white px-3 py-1.5 rounded-lg hover:opacity-90 transition">
+                                                    View Submissions
+                                                </a>
+                                                <button type="button"
+                                                    onclick='openEditAssignmentModal(<?= json_encode([
+                                                        "id" => $assignment["Assignment_ID"],
+                                                        "title" => $assignment["Title"],
+                                                        "description" => $assignment["Description"],
+                                                        "due_date" => date("Y-m-d\TH:i", strtotime($assignment["DueDate"])),
+                                                        "max_score" => $assignment["MaxScore"],
+                                                        "attachment_name" => $assignment["AttachmentName"],
+                                                    ]) ?>)'
+                                                    class="text-xs font-semibold bg-school-green text-white px-3 py-1.5 rounded-lg hover:bg-school-green-hover transition">
+                                                    Edit
+                                                </button>
+                                                <form action="delete-assignment.php" method="POST"
+                                                      onsubmit="return confirm('Delete this assignment? This will also remove all student submissions for it.');">
+                                                    <input type="hidden" name="course_id" value="<?= $course_id ?>">
+                                                    <input type="hidden" name="assignment_id" value="<?= $assignment['Assignment_ID'] ?>">
+                                                    <button type="submit" class="text-xs font-semibold bg-red-50 text-red-600 border border-red-200 px-3 py-1.5 rounded-lg hover:bg-red-100 transition">
+                                                        Delete
+                                                    </button>
+                                                </form>
                                             </div>
 
                                         </div>
@@ -387,30 +421,6 @@ $error_msg   = $error_messages[$_GET['error'] ?? ''] ?? null;
 
         <?php endif; ?>
 
-        <!-- grades -->
-        <section class="bg-[#fcfbf7] rounded-3xl p-6 shadow-lg border border-school-gold/20">
-
-            <div class="flex justify-between items-center">
-
-                <div>
-
-                    <h2 class="text-2xl font-bold text-school-green">
-                        📊 Grades
-                    </h2>
-
-                    <p class="text-gray-500">
-                        Redirect to grades page for this course.
-                    </p>
-                </div>
-
-                <a href="prof-grades.php?course_id=<?= $course_id ?>"
-                    class="bg-school-gold text-white px-6 py-3 rounded-2xl font-semibold hover:opacity-90 transition">
-                    Manage Grades →
-                </a>
-
-            </div>
-
-        </section>
 
     </main>
 
@@ -509,6 +519,56 @@ $error_msg   = $error_messages[$_GET['error'] ?? ''] ?? null;
         </div>
     </div>
 
+    <!-- Edit Assignment Modal -->
+    <div id="editAssignmentModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-lg shadow-xl font-sans max-h-[90vh] overflow-y-auto">
+            <h3 class="text-xl font-bold text-school-green mb-4">Edit Assignment</h3>
+            <form action="edit-assignment.php" method="POST" enctype="multipart/form-data">
+                <input type="hidden" name="course_id" value="<?= $course_id ?>">
+                <input type="hidden" name="assignment_id" id="editAssignmentId" value="">
+
+                <label class="block text-sm font-semibold text-gray-600 mb-1">Title</label>
+                <input type="text" name="title" id="editAssignmentTitle" required
+                    class="w-full border border-gray-300 rounded-xl px-4 py-2 mb-4 focus:outline-none focus:ring-2 focus:ring-school-green">
+
+                <label class="block text-sm font-semibold text-gray-600 mb-1">Instructions</label>
+                <textarea name="instructions" id="editAssignmentInstructions" required rows="4"
+                    class="w-full border border-gray-300 rounded-xl px-4 py-2 mb-4 focus:outline-none focus:ring-2 focus:ring-school-green"></textarea>
+
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-600 mb-1">Due Date</label>
+                        <input type="datetime-local" name="due_date" id="editAssignmentDueDate" required
+                            class="w-full border border-gray-300 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-school-green">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-600 mb-1">Max Score</label>
+                        <input type="number" step="0.01" min="0" name="max_score" id="editAssignmentMaxScore" required
+                            class="w-full border border-gray-300 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-school-green">
+                    </div>
+                </div>
+
+                <p id="editAssignmentCurrentFile" class="text-xs text-gray-500 mb-2"></p>
+
+                <label class="block text-sm font-semibold text-gray-600 mb-1">Replace Attachment (optional)</label>
+                <input type="file" name="attachment_file"
+                    class="w-full border border-gray-300 rounded-xl px-4 py-2 mb-2">
+
+                <label class="flex items-center gap-2 text-xs text-gray-500 mb-4">
+                    <input type="checkbox" name="remove_attachment" value="1">
+                    Remove current attachment (and don't upload a new one)
+                </label>
+
+                <div class="flex justify-end gap-3">
+                    <button type="button" onclick="document.getElementById('editAssignmentModal').classList.add('hidden')"
+                        class="px-4 py-2 rounded-xl text-gray-500 hover:bg-gray-100">Cancel</button>
+                    <button type="submit"
+                        class="bg-school-green text-white px-5 py-2 rounded-xl font-semibold hover:bg-school-green-hover">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
         function openMaterialModal(moduleId) {
             document.getElementById('materialModuleId').value = moduleId;
@@ -517,6 +577,17 @@ $error_msg   = $error_messages[$_GET['error'] ?? ''] ?? null;
         function openAssignmentModal(moduleId) {
             document.getElementById('assignmentModuleId').value = moduleId;
             document.getElementById('addAssignmentModal').classList.remove('hidden');
+        }
+        function openEditAssignmentModal(assignment) {
+            document.getElementById('editAssignmentId').value = assignment.id;
+            document.getElementById('editAssignmentTitle').value = assignment.title;
+            document.getElementById('editAssignmentInstructions').value = assignment.description;
+            document.getElementById('editAssignmentDueDate').value = assignment.due_date;
+            document.getElementById('editAssignmentMaxScore').value = assignment.max_score;
+            document.getElementById('editAssignmentCurrentFile').textContent = assignment.attachment_name
+                ? ('Current attachment: ' + assignment.attachment_name)
+                : 'No attachment currently uploaded.';
+            document.getElementById('editAssignmentModal').classList.remove('hidden');
         }
     </script>
 
