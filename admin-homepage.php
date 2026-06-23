@@ -1,75 +1,58 @@
 <?php
-$required_role = 'Student';
+$required_role = 'Admin';
 include 'session_check.php';
-include 'db.php';
+include 'db.php'; 
 
-$first_name = htmlspecialchars($_SESSION['first_name']);
-$last_name  = htmlspecialchars($_SESSION['last_name']);
+// Fetch Admin credentials safely from current session
+$first_name = htmlspecialchars($_SESSION['first_name'] ?? 'Admin');
+$last_name  = htmlspecialchars($_SESSION['last_name'] ?? 'User');
 $initials   = strtoupper(substr($first_name, 0, 1) . substr($last_name, 0, 1));
 $full_name  = $first_name . ' ' . $last_name;
-$student_id = $_SESSION['user_id'];
-
-// Define connection parameters locally to isolate configuration dependencies
-$host     = 'localhost';
-$dbname   = 'learningmanagementsystem';
-$username = 'root';
-$password = '';
 
 try {
-    // 1. Get total active enrolled courses for this student
-    $course_count_stmt = $pdo->prepare("
+    // 1. Get total system-wide Active Students count
+    $student_count_stmt = $pdo->query("
         SELECT COUNT(*) 
-        FROM Enrollment 
-        WHERE FK_User_ID = :user_id AND EnrollmentStatus = 'Enrolled'
+        FROM Users u
+        INNER JOIN Role r ON u.FK_Role_ID = r.Role_ID
+        WHERE r.RoleName = 'Student' AND u.Status = 'Active'
     ");
-    $course_count_stmt->execute([':user_id' => $student_id]);
-    $course_count = $course_count_stmt->fetchColumn();
+    $total_students = $student_count_stmt->fetchColumn();
 
-    // 2. Get total pending activities due (enrolled courses, not submitted, not past due)
-    $pending_count_stmt = $pdo->prepare("
+    // 2. Get total system-wide Active Professors count
+    $prof_count_stmt = $pdo->query("
         SELECT COUNT(*) 
-        FROM Assignments a
-        INNER JOIN CourseModule cm ON a.FK_CourseModule_ID = cm.CourseModule_ID
-        INNER JOIN Enrollment e ON cm.FK_Course_ID = e.FK_Course_ID
-        LEFT JOIN AssignmentSubmission sub ON a.Assignment_ID = sub.FK_Assignment_ID AND sub.FK_User_ID = :user_id_sub
-        WHERE e.FK_User_ID = :user_id 
-          AND e.EnrollmentStatus = 'Enrolled'
-          AND sub.AssignmentSubmission_ID IS NULL
-          AND a.DueDate >= NOW()
+        FROM Users u
+        INNER JOIN Role r ON u.FK_Role_ID = r.Role_ID
+        WHERE r.RoleName = 'Professor' AND u.Status = 'Active'
     ");
-    $pending_count_stmt->execute([
-        ':user_id'     => $student_id,
-        ':user_id_sub' => $student_id
-    ]);
-    $pending_activities_count = $pending_count_stmt->fetchColumn();
+    $total_professors = $prof_count_stmt->fetchColumn();
 
-    // 3. Extract recent bulletins connected strictly to this student's courses (Excluding Global Admin entries)
+    // 3. Get total running active academic courses
+    $course_count_stmt = $pdo->query("
+        SELECT COUNT(*) 
+        FROM Courses 
+        WHERE Status = 'Active'
+    ");
+    $total_courses = $course_count_stmt->fetchColumn();
+
+    // 4. Extract recent global system announcements for administrative tracking
     $ann_stmt = $pdo->prepare("
         SELECT a.Title, a.Message, a.PostDate, c.CourseCode 
         FROM Announcements a
         INNER JOIN Courses c ON a.FK_Course_ID = c.Course_ID
-        INNER JOIN Enrollment e ON c.Course_ID = e.FK_Course_ID
-        WHERE e.FK_User_ID = :user_id AND e.EnrollmentStatus = 'Enrolled' AND c.CourseCode != 'ADMIN'
         ORDER BY a.PostDate DESC 
-        LIMIT 3
+        LIMIT 4
     ");
-    $ann_stmt->execute([':user_id' => $student_id]);
+    $ann_stmt->execute();
     $recent_announcements = $ann_stmt->fetchAll();
 
-    // 4. Extract the latest critical Global Administration announcement notice
-    $admin_ann_stmt = $pdo->prepare("
-        SELECT a.Title, a.Message, a.PostDate 
-        FROM Announcements a
-        INNER JOIN Courses c ON a.FK_Course_ID = c.Course_ID
-        WHERE c.CourseCode = 'ADMIN'
-        ORDER BY a.PostDate DESC 
-        LIMIT 1
-    ");
-    $admin_ann_stmt->execute();
-    $admin_notice = $admin_ann_stmt->fetch();
-
 } catch (PDOException $e) {
-    die("Error processing dashboard metrics: " . $e->getMessage());
+    // Graceful fallback behavior to protect page construction layout
+    $total_students = 0;
+    $total_professors = 0;
+    $total_courses = 0;
+    $recent_announcements = [];
 }
 ?>
 <!DOCTYPE html>
@@ -77,7 +60,7 @@ try {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>St. Ives School - Dashboard</title>
+    <title>St. Ives School - Admin Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -110,27 +93,19 @@ try {
             </div>
 
             <nav class="space-y-2">
-                <a href="homepage.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl bg-school-green text-white font-semibold transition shadow-md">
+                <a href="admin-homepage.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl bg-school-green text-white font-semibold transition shadow-md">
                     <span class="text-xl">🏛️</span>
-                    <span>Institution Home</span>
+                    <span>Admin Console Home</span>
                 </a>
-                <a href="courses.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
+                </a>
+                <a href="manage-course.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
                     <span class="text-xl opacity-70 group-hover:opacity-100">📚</span>
-                    <span>Courses</span>
+                    <span>Manage Courses</span>
                 </a>
-                <a href="activities.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
+                <a href="admin-roles.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
                     <span class="text-xl opacity-70 group-hover:opacity-100">🏆</span>
-                    <span>Activities</span>
-                </a>
-                <a href="grades.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
-                    <span class="text-xl opacity-70 group-hover:opacity-100">📊</span>
-                    <span>Grades</span>
-                </a>
-
-                <a href="Account-info.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
-                    <span class="text-xl opacity-70 group-hover:opacity-100">👤</span>
-                    <span>Account</span>
-                </a>
+                    <span>Manage Roles</span>
+                </a> 
             </nav>
         </div>
 
@@ -141,7 +116,7 @@ try {
                 </div>
                 <div>
                     <h4 class="text-sm font-bold text-school-green leading-tight"><?= $full_name ?></h4>
-                    <p class="text-xs text-gray-500">Student Account</p>
+                    <p class="text-xs text-gray-500">Admin Account</p>
                 </div>
             </div>
             <a href="logout.php" title="Log Out" class="text-gray-400 hover:text-red-600 transition p-1 text-lg">
@@ -154,7 +129,7 @@ try {
         
         <header class="bg-[#fcfbf7] rounded-2xl p-6 sm:p-8 shadow-lg border border-school-gold/20 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
-                <h1 class="text-3xl font-bold tracking-wide text-school-green">Welcome back, <?= $first_name ?>!</h1>
+                <h1 class="text-3xl font-bold tracking-wide text-school-green">System Administration, <?= $first_name ?>!</h1>
                 <p class="text-gray-600 italic mt-1">"The roots of education are bitter, but the fruit is sweet."</p>
             </div>
             <div class="bg-school-green/5 text-school-green text-sm px-4 py-2 rounded-xl border border-school-green/10 font-sans">
@@ -162,31 +137,15 @@ try {
             </div>
         </header>
 
-        <!-- OFFICIAL ADMIN BROADCAST NOTICE CARD -->
-        <?php if ($admin_notice): ?>
-            <div class="bg-gradient-to-r from-red-50 to-amber-50 border-2 border-red-200 rounded-2xl p-5 shadow-md font-sans mb-6">
-                <div class="flex items-center justify-between mb-2">
-                    <span class="bg-red-600 text-white font-bold text-[10px] uppercase px-2 py-0.5 rounded tracking-wider">
-                        🚨 Official Admin Notice
-                    </span>
-                    <span class="text-[10px] text-gray-400 font-semibold">
-                        📅 <?= date('M d, Y @ h:i A', strtotime($admin_notice['PostDate'])) ?>
-                    </span>
-                </div>
-                <h3 class="text-base font-bold text-red-900"><?= htmlspecialchars($admin_notice['Title']) ?></h3>
-                <p class="text-xs text-red-800 mt-1 leading-relaxed"><?= htmlspecialchars($admin_notice['Message']) ?></p>
-            </div>
-        <?php endif; ?>
-
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             
             <div class="lg:col-span-2 space-y-6">
                 
                 <section class="bg-[#fcfbf7] rounded-2xl p-6 shadow-lg border border-school-gold/20">
-                    <h3 class="text-xl font-bold text-school-green border-b border-gray-100 pb-3 mb-4">🏫 Institutional Announcements</h3>
+                    <h3 class="text-xl font-bold text-school-green border-b border-gray-100 pb-3 mb-4">📢 System Broadcast Logs</h3>
                     
                     <?php if (empty($recent_announcements)): ?>
-                        <p class="text-sm text-gray-400 italic">No historical announcements distributed for your assigned courses.</p>
+                        <p class="text-sm text-gray-400 italic">No historical announcements distributed across courses yet.</p>
                     <?php else: ?>
                         <div class="space-y-4 font-sans">
                             <?php foreach ($recent_announcements as $announcement): ?>
@@ -205,19 +164,26 @@ try {
                     <?php endif; ?>
                 </section>
 
-                <section class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <section class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div class="bg-[#fcfbf7] p-5 rounded-2xl shadow-md border border-school-gold/10 flex items-center space-x-4">
-                        <div class="p-3 bg-school-green/10 rounded-xl text-2xl">📚</div>
+                        <div class="p-3 bg-school-green/10 rounded-xl text-2xl">🎓</div>
                         <div>
-                            <h4 class="text-xs font-sans uppercase text-gray-400 tracking-wider font-semibold">Active Enrolled Courses</h4>
-                            <p class="text-2xl font-bold text-school-green mt-1 font-sans"><?= (int)$course_count ?></p>
+                            <h4 class="text-xs font-sans uppercase text-gray-400 tracking-wider font-semibold">Active Students</h4>
+                            <p class="text-2xl font-bold text-school-green mt-1 font-sans"><?= (int)$total_students ?></p>
                         </div>
                     </div>
                     <div class="bg-[#fcfbf7] p-5 rounded-2xl shadow-md border border-school-gold/10 flex items-center space-x-4">
-                        <div class="p-3 bg-school-gold/10 rounded-xl text-2xl">📝</div>
+                        <div class="p-3 bg-school-gold/10 rounded-xl text-2xl">👨‍🏫</div>
                         <div>
-                            <h4 class="text-xs font-sans uppercase text-gray-400 tracking-wider font-semibold">Pending Activities Due</h4>
-                            <p class="text-2xl font-bold text-school-green mt-1 font-sans"><?= (int)$pending_activities_count ?></p>
+                            <h4 class="text-xs font-sans uppercase text-gray-400 tracking-wider font-semibold">Instructors</h4>
+                            <p class="text-2xl font-bold text-school-green mt-1 font-sans"><?= (int)$total_professors ?></p>
+                        </div>
+                    </div>
+                    <div class="bg-[#fcfbf7] p-5 rounded-2xl shadow-md border border-school-gold/10 flex items-center space-x-4">
+                        <div class="p-3 bg-school-green/10 rounded-xl text-2xl">📚</div>
+                        <div>
+                            <h4 class="text-xs font-sans uppercase text-gray-400 tracking-wider font-semibold">Live Courses</h4>
+                            <p class="text-2xl font-bold text-school-green mt-1 font-sans"><?= (int)$total_courses ?></p>
                         </div>
                     </div>
                 </section>
@@ -225,18 +191,18 @@ try {
 
             <div class="space-y-6">
                 <section class="bg-[#fcfbf7] rounded-2xl p-6 shadow-lg border border-school-gold/20">
-                    <h3 class="text-lg font-bold text-school-green border-b border-gray-100 pb-2 mb-3">⚡ Quick Portal Access</h3>
+                    <h3 class="text-lg font-bold text-school-green border-b border-gray-100 pb-2 mb-3">⚡ Admin Administrative Operations</h3>
                     <div class="grid grid-cols-1 gap-2.5 font-sans">
-                        <a href="courses.php" class="p-3 bg-gray-50 rounded-xl hover:bg-school-green/5 border border-gray-200 hover:border-school-green/20 transition flex justify-between items-center text-sm font-medium">
-                            <span>Open Enrolled Courses</span>
+                        <a href="admin-users.php" class="p-3 bg-gray-50 rounded-xl hover:bg-school-green/5 border border-gray-200 hover:border-school-green/20 transition flex justify-between items-center text-sm font-medium">
+                            <span>Register / Edit System Accounts</span>
                             <span class="text-school-green">→</span>
                         </a>
-                        <a href="activities.php" class="p-3 bg-gray-50 rounded-xl hover:bg-school-green/5 border border-gray-200 hover:border-school-green/20 transition flex justify-between items-center text-sm font-medium">
-                            <span>View Calendar Deadlines</span>
+                        <a href="admin-courses.php" class="p-3 bg-gray-50 rounded-xl hover:bg-school-green/5 border border-gray-200 hover:border-school-green/20 transition flex justify-between items-center text-sm font-medium">
+                            <span>Create Course Curriculum Slots</span>
                             <span class="text-school-green">→</span>
                         </a>
-                        <a href="grades.php" class="p-3 bg-gray-50 rounded-xl hover:bg-school-green/5 border border-gray-200 hover:border-school-green/20 transition flex justify-between items-center text-sm font-medium">
-                            <span>Check Report Card History</span>
+                        <a href="admin-settings.php" class="p-3 bg-gray-50 rounded-xl hover:bg-school-green/5 border border-gray-200 hover:border-school-green/20 transition flex justify-between items-center text-sm font-medium">
+                            <span>Global LMS System Parameters</span>
                             <span class="text-school-green">→</span>
                         </a>
                     </div>

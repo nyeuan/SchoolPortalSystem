@@ -15,36 +15,35 @@ $username = 'root';
 $password = '';
 
 try {
-
     // 1. Get total course assignments metric counter
     $count_stmt = $pdo->prepare("SELECT COUNT(*) FROM CourseInstructors WHERE FK_User_ID = :user_id");
     $count_stmt->execute([':user_id' => $_SESSION['user_id']]);
     $course_count = $count_stmt->fetchColumn();
 
-    // CHANGE: Added dynamic tracking query for student submissions needing evaluation
-    $ungraded_stmt = $pdo->prepare("
-        SELECT COUNT(*) 
-        FROM AssignmentSubmission sub
-        INNER JOIN Assignments a ON sub.FK_Assignment_ID = a.Assignment_ID
-        INNER JOIN CourseModule cm ON a.FK_CourseModule_ID = cm.CourseModule_ID
-        INNER JOIN CourseInstructors ci ON cm.FK_Course_ID = ci.FK_Course_ID
-        WHERE ci.FK_User_ID = :user_id AND sub.Score IS NULL
-    ");
-    $ungraded_stmt->execute([':user_id' => $_SESSION['user_id']]);
-    $ungraded_submissions_count = $ungraded_stmt->fetchColumn();
-
-    // 2. Extract recent bulletins connected strictly to this teacher's portfolio
+    // 2. Extract recent bulletins connected strictly to this teacher's portfolio (Excluding Global Admin entries)
     $ann_stmt = $pdo->prepare("
         SELECT a.Title, a.Message, a.PostDate, c.CourseCode 
         FROM Announcements a
         INNER JOIN Courses c ON a.FK_Course_ID = c.Course_ID
         INNER JOIN CourseInstructors ci ON c.Course_ID = ci.FK_Course_ID
-        WHERE ci.FK_User_ID = :user_id
+        WHERE ci.FK_User_ID = :user_id AND c.CourseCode != 'ADMIN'
         ORDER BY a.PostDate DESC 
         LIMIT 3
     ");
     $ann_stmt->execute([':user_id' => $_SESSION['user_id']]);
     $recent_announcements = $ann_stmt->fetchAll();
+
+    // 3. Extract the latest critical Global Administration announcement notice
+    $admin_ann_stmt = $pdo->prepare("
+        SELECT a.Title, a.Message, a.PostDate 
+        FROM Announcements a
+        INNER JOIN Courses c ON a.FK_Course_ID = c.Course_ID
+        WHERE c.CourseCode = 'ADMIN'
+        ORDER BY a.PostDate DESC 
+        LIMIT 1
+    ");
+    $admin_ann_stmt->execute();
+    $admin_notice = $admin_ann_stmt->fetch();
 
 } catch (PDOException $e) {
     die("Error processing dashboard metrics: " . $e->getMessage());
@@ -98,11 +97,6 @@ try {
                     <span class="text-xl opacity-70 group-hover:opacity-100">📚</span>
                     <span>Courses</span>
                 </a>
-
-                <a href="Account-info.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
-                    <span class="text-xl opacity-70 group-hover:opacity-100">👤</span>
-                    <span>Account</span>
-                </a>
             </nav>
         </div>
 
@@ -112,9 +106,7 @@ try {
                     <?= $initials ?>
                 </div>
                 <div>
-                    <h4 class="text-sm font-bold text-school-green leading-tight">
-                        <?= $full_name ?>
-                    </h4>
+                    <h4 class="text-sm font-bold text-school-green leading-tight"><?= $full_name ?></h4>
                     <p class="text-xs text-gray-500">Professor Account</p>
                 </div>
             </div>
@@ -128,13 +120,28 @@ try {
         
         <header class="bg-[#fcfbf7] rounded-2xl p-6 sm:p-8 shadow-lg border border-school-gold/20 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
-                <h1 class="text-3xl font-bold tracking-wide text-school-green">Welcome back</h1>
+                <h1 class="text-3xl font-bold tracking-wide text-school-green">Welcome back, <?= $first_name ?>!</h1>
                 <p class="text-gray-600 italic mt-1">"The roots of education are bitter, but the fruit is sweet."</p>
             </div>
             <div class="bg-school-green/5 text-school-green text-sm px-4 py-2 rounded-xl border border-school-green/10 font-sans">
                 📅 School Year: <span class="font-bold">2026-2027</span>
             </div>
         </header>
+
+        <?php if ($admin_notice): ?>
+            <div class="bg-gradient-to-r from-red-50 to-amber-50 border-2 border-red-200 rounded-2xl p-5 shadow-md font-sans mb-6">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="bg-red-600 text-white font-bold text-[10px] uppercase px-2 py-0.5 rounded tracking-wider">
+                        🚨 Official Admin Notice
+                    </span>
+                    <span class="text-[10px] text-gray-400 font-semibold">
+                        📅 <?= date('M d, Y @ h:i A', strtotime($admin_notice['PostDate'])) ?>
+                    </span>
+                </div>
+                <h3 class="text-base font-bold text-red-900"><?= htmlspecialchars($admin_notice['Title']) ?></h3>
+                <p class="text-xs text-red-800 mt-1 leading-relaxed"><?= htmlspecialchars($admin_notice['Message']) ?></p>
+            </div>
+        <?php endif; ?>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             
@@ -175,8 +182,8 @@ try {
                     <div class="bg-[#fcfbf7] p-5 rounded-2xl shadow-md border border-school-gold/10 flex items-center space-x-4">
                         <div class="p-3 bg-school-gold/10 rounded-xl text-2xl">✍️</div>
                         <div>
-                            <h4 class="text-xs font-sans uppercase text-gray-400 tracking-wider font-semibold">Submissions To Grade</h4>
-                            <p class="text-2xl font-bold text-school-green mt-1 font-sans"><?= (int)$ungraded_submissions_count ?></p>
+                            <h4 class="text-xs font-sans uppercase text-gray-400 tracking-wider font-semibold">Pending Activities Due</h4>
+                            <p class="text-sm text-gray-400 italic mt-1">No activities pending verification logs.</p>
                         </div>
                     </div>
                 </section>
@@ -201,7 +208,7 @@ try {
                     <div class="absolute -right-6 -bottom-6 text-white/5 text-8xl font-sans pointer-events-none select-none">🏛️</div>
                     <h4 class="text-school-yellow uppercase tracking-widest text-xs font-bold font-sans">The Institutional Pillars</h4>
                     <p class="text-lg font-bold mt-2 leading-snug">"Charity, Wisdom, Obedience"</p>
-                    <p class="text-xs text-gray-300 mt-2 leading-relaxed">Instilled during the foundation year of 1994, St. Ives School continuous to nurture lifelong learners focused on community enrichment.</p>
+                    <p class="text-xs text-gray-300 mt-2 leading-relaxed">Instilled during the foundation year of 1994, St. Ives School continues to nurture lifelong learners focused on community enrichment.</p>
                 </section>
             </div>
 
