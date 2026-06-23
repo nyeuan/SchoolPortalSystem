@@ -17,14 +17,14 @@ try {
     $terms = $pdo->query("SELECT Term_ID, TermName FROM Term ORDER BY StartDate DESC")->fetchAll();
 } catch (PDOException $e) { $terms = []; }
 
-// ── Build WHERE clause ─────────────────────────────────────
-$where_parts = ["e.FK_User_ID = :student_id", "e.EnrollmentStatus = 'Enrolled'"];
-$params      = [':student_id' => $student_id];
-
-if ($filter_term > 0) {
-    $where_parts[] = "e.FK_Term_ID = :term_id";
-    $params[':term_id'] = $filter_term;
+// ── Default to the latest term if none explicitly selected ─
+if ($filter_term === 0 && !empty($terms)) {
+    $filter_term = (int)$terms[0]['Term_ID'];
 }
+
+// ── Build WHERE clause ─────────────────────────────────────
+$where_parts = ["e.FK_User_ID = :student_id", "e.EnrollmentStatus = 'Enrolled'", "e.FK_Term_ID = :term_id"];
+$params      = [':student_id' => $student_id, ':term_id' => $filter_term];
 
 $where_sql = implode(' AND ', $where_parts);
 
@@ -129,8 +129,7 @@ function determineLetterGrade($grade) {
 
         <section class="bg-[#fcfbf7] rounded-2xl p-6 shadow-lg border border-school-gold/20 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <h1 class="text-3xl font-bold tracking-wide text-school-green">Academic Report</h1>
-            <!-- ── Export link now carries the active term filter ── -->
-            <a href="download-grades.php<?= $filter_term > 0 ? '?term=' . $filter_term : '' ?>"
+            <a href="download-grades.php?term=<?= $filter_term ?>"
                class="shrink-0 inline-block bg-school-gold hover:opacity-90 text-white font-sans font-bold text-xs px-5 py-3.5 rounded-xl shadow-md transition">
                 💼 Export PDF
             </a>
@@ -142,16 +141,12 @@ function determineLetterGrade($grade) {
                 <label class="text-sm font-semibold text-school-green font-sans shrink-0">Filter by Term:</label>
                 <select name="term" onchange="this.form.submit()"
                     class="border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-school-green font-sans text-sm w-full sm:w-72">
-                    <option value="0">All Terms</option>
                     <?php foreach ($terms as $t): ?>
-                        <option value="<?= $t['Term_ID'] ?>" <?= ($filter_term === $t['Term_ID']) ? 'selected' : '' ?>>
+                        <option value="<?= $t['Term_ID'] ?>" <?= ($filter_term === (int)$t['Term_ID']) ? 'selected' : '' ?>>
                             <?= htmlspecialchars($t['TermName']) ?>
                         </option>
                     <?php endforeach; ?>
                 </select>
-                <?php if ($filter_term > 0): ?>
-                    <a href="grades.php" class="text-xs text-school-green underline font-sans shrink-0">Clear filter</a>
-                <?php endif; ?>
             </form>
         </section>
 

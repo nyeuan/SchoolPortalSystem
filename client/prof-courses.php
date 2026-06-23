@@ -220,19 +220,107 @@ try {
 
     <script>
         const searchInput = document.getElementById('searchInput');
-        const cards       = document.querySelectorAll('.course-card');
+        const allCards    = Array.from(document.querySelectorAll('.course-card'));
         const noResults   = document.getElementById('noResults');
+        const PER_PAGE    = 12;
+        let currentPage   = 1;
+        let filteredCards = [...allCards];
 
+        // ── Pagination container ───────────────────────────
+        const paginationEl = document.createElement('div');
+        paginationEl.id = 'pagination';
+        paginationEl.className = 'flex items-center justify-center gap-2 mt-6 flex-wrap';
+        document.querySelector('section:last-of-type').appendChild(paginationEl);
+
+        function applySearch(q) {
+            filteredCards = allCards.filter(card => card.dataset.search.includes(q));
+        }
+
+        function renderPage() {
+            const total = filteredCards.length;
+            const totalPages = Math.ceil(total / PER_PAGE);
+            const start = (currentPage - 1) * PER_PAGE;
+            const end   = start + PER_PAGE;
+
+            // Show/hide cards
+            allCards.forEach(card => card.style.display = 'none');
+            filteredCards.slice(start, end).forEach(card => card.style.display = '');
+
+            // No results message
+            noResults.classList.toggle('hidden', total > 0);
+
+            // Build pagination controls
+            paginationEl.innerHTML = '';
+            if (totalPages <= 1) return;
+
+            const btnBase = 'px-3 py-1.5 rounded-lg text-sm font-semibold font-sans transition ';
+            const btnActive = btnBase + 'bg-school-green text-white shadow';
+            const btnInactive = btnBase + 'bg-[#fcfbf7] text-school-green border border-school-gold/30 hover:bg-school-green/10';
+            const btnDisabled = btnBase + 'bg-gray-100 text-gray-400 cursor-not-allowed';
+
+            // Prev
+            const prev = document.createElement('button');
+            prev.textContent = '← Prev';
+            prev.className = currentPage === 1 ? btnDisabled : btnInactive;
+            prev.disabled = currentPage === 1;
+            prev.onclick = () => { currentPage--; renderPage(); scrollToGrid(); };
+            paginationEl.appendChild(prev);
+
+            // Page numbers
+            const pageNums = getPageRange(currentPage, totalPages);
+            pageNums.forEach(p => {
+                if (p === '...') {
+                    const dots = document.createElement('span');
+                    dots.textContent = '…';
+                    dots.className = 'px-2 text-gray-400 font-sans';
+                    paginationEl.appendChild(dots);
+                    return;
+                }
+                const btn = document.createElement('button');
+                btn.textContent = p;
+                btn.className = p === currentPage ? btnActive : btnInactive;
+                btn.onclick = () => { currentPage = p; renderPage(); scrollToGrid(); };
+                paginationEl.appendChild(btn);
+            });
+
+            // Next
+            const next = document.createElement('button');
+            next.textContent = 'Next →';
+            next.className = currentPage === totalPages ? btnDisabled : btnInactive;
+            next.disabled = currentPage === totalPages;
+            next.onclick = () => { currentPage++; renderPage(); scrollToGrid(); };
+            paginationEl.appendChild(next);
+
+            // Count label
+            const label = document.createElement('p');
+            const showing_start = total === 0 ? 0 : start + 1;
+            const showing_end   = Math.min(end, total);
+            label.textContent = `Showing ${showing_start}–${showing_end} of ${total} course${total !== 1 ? 's' : ''}`;
+            label.className = 'w-full text-center text-xs text-gray-500 font-sans mt-1';
+            paginationEl.appendChild(label);
+        }
+
+        function getPageRange(current, total) {
+            if (total <= 7) return Array.from({length: total}, (_, i) => i + 1);
+            if (current <= 4) return [1, 2, 3, 4, 5, '...', total];
+            if (current >= total - 3) return [1, '...', total-4, total-3, total-2, total-1, total];
+            return [1, '...', current-1, current, current+1, '...', total];
+        }
+
+        function scrollToGrid() {
+            document.getElementById('courseGrid').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        // ── Search handler ─────────────────────────────────
         searchInput.addEventListener('input', function () {
             const q = this.value.toLowerCase().trim();
-            let visible = 0;
-            cards.forEach(card => {
-                const match = card.dataset.search.includes(q);
-                card.style.display = match ? '' : 'none';
-                if (match) visible++;
-            });
-            noResults.classList.toggle('hidden', visible > 0 || q === '');
+            applySearch(q);
+            currentPage = 1;
+            renderPage();
         });
+
+        // Initial render
+        renderPage();
     </script>
 </body>
 </html>
