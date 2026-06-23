@@ -6,9 +6,12 @@ $first_name = htmlspecialchars($_SESSION['first_name']);
 $last_name  = htmlspecialchars($_SESSION['last_name']);
 $student_id = $_SESSION['user_id'];
 
+// ── Carry the term filter forward from grades.php ──────────
+$filter_term = isset($_GET['term']) ? (int)$_GET['term'] : 0;
+
 try {
     // Determine the active hostname to prevent hardcoded URL pathing failures
-    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
+    $protocol   = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
     $server_url = $protocol . $_SERVER['HTTP_HOST'] . dirname($_SERVER['PHP_SELF']) . '/soap-server.php';
 
     // 1. Initialize the SOAP Client wrapper in non-WSDL context layout mode
@@ -18,8 +21,10 @@ try {
         'trace'    => 1
     ));
 
-    // 2. Consume the remote XML function payload via SOAP
-    $validated_xml_string = $soap_client->fetchXmlAcademicTranscript($student_id, $first_name, $last_name);
+    // 2. Consume the remote XML function payload via SOAP, passing the active term filter
+    $validated_xml_string = $soap_client->fetchXmlAcademicTranscript(
+        $student_id, $first_name, $last_name, $filter_term
+    );
 
     // 3. Mount text elements string into simplexml arrays
     $xml_data = simplexml_load_string($validated_xml_string);
@@ -49,25 +54,28 @@ try {
 
     <div class="max-w-4xl mx-auto mb-6 bg-white rounded-xl p-4 shadow border border-amber-600/20 flex justify-between items-center no-print">
         <div class="text-xs text-gray-500 font-sans">
-           Click print and set destination to <span class="font-semibold">"Save as PDF"</span>.
+            Click print and set destination to <span class="font-semibold">"Save as PDF"</span>.
         </div>
         <div class="flex gap-2">
-            <a href="grades.php" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-sans font-bold text-xs hover:bg-gray-300 transition">← Back</a>
+            <!-- ── Back link preserves the active term filter ── -->
+            <a href="grades.php<?= $filter_term > 0 ? '?term=' . $filter_term : '' ?>"
+               class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-sans font-bold text-xs hover:bg-gray-300 transition">← Back</a>
             <button onclick="window.print()" class="bg-[#0b4222] text-white px-5 py-2 rounded-lg font-sans font-bold text-xs hover:opacity-90 transition">🖨 Print / Save PDF</button>
         </div>
     </div>
 
     <main class="max-w-4xl mx-auto bg-[#fcfbf7] p-12 shadow-xl border border-gray-200 rounded-sm">
-        
+
         <div class="text-center border-b-2 border-[#b8860b] pb-4 mb-6">
             <h1 class="text-3xl font-bold tracking-wide text-[#0b4222]">ST. IVES SCHOOL</h1>
             <p class="text-xs italic text-gray-500 font-sans mt-1">Wisdom & Charity</p>
         </div>
-        
+
         <h2 class="text-xl font-bold text-center text-[#0b4222] font-sans tracking-wide mb-6">OFFICIAL TRANSCRIPT OF RECORDS</h2>
-        
+
         <div class="grid grid-cols-2 gap-4 text-sm font-sans mb-8">
             <div><strong>Student Name:</strong> <?= htmlspecialchars($xml_data->StudentName) ?></div>
+            <!-- ── SchoolYear now reflects the active term label ── -->
             <div class="text-right"><strong>Academic Term:</strong> <?= htmlspecialchars($xml_data->SchoolYear) ?></div>
         </div>
 

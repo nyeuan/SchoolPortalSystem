@@ -1,6 +1,16 @@
 <?php
+// Ensure session variables are active for the sidebar layout
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
 include 'db.php';
+
+// Profile badge assignments matching the session data
+$first_name = htmlspecialchars($_SESSION['first_name'] ?? 'Admin');
+$last_name  = htmlspecialchars($_SESSION['last_name'] ?? 'User');
+$initials   = strtoupper(substr($first_name, 0, 1) . substr($last_name, 0, 1));
+$full_name  = $first_name . ' ' . $last_name;
 
 $stmt = $pdo->query("
 SELECT
@@ -15,7 +25,7 @@ ON Users.FK_Role_ID = Role.Role_ID
 ORDER BY LastName, FirstName
 ");
 
-
+$active = 'roles';
 ?>
 
 <!DOCTYPE html>
@@ -47,13 +57,12 @@ ORDER BY LastName, FirstName
 
 <body class="bg-gradient-to-br from-school-green via-[#125730] to-school-yellow min-h-screen font-serif text-gray-800 flex flex-col md:flex-row">
 
-<aside class="w-full md:w-64 bg-[#fcfbf7] border-r border-school-gold/20 flex flex-col justify-between p-6 shadow-xl">
+<aside class="w-full md:w-64 bg-[#fcfbf7] border-r border-school-gold/20 flex flex-col justify-between p-6 shadow-xl md:min-h-screen shrink-0">
 
     <div>
 
         <div class="flex items-center space-x-3 mb-8 pb-4 border-b">
-            <img src="stiveslogo.png"
-                 class="h-12 w-12">
+            <img src="stiveslogo.png" class="h-12 w-12">
 
             <div>
                 <h2 class="font-bold text-school-green">
@@ -67,24 +76,37 @@ ORDER BY LastName, FirstName
         </div>
 
         <nav class="space-y-2">
-
-            <a href="admin-homepage.php"
-               class="block px-4 py-3 rounded-xl text-school-green font-semibold">
-                🏛️ Admin Home
+            <a href="admin-homepage.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl transition font-semibold <?= $active === 'home' ? 'bg-school-green text-white shadow-md' : 'text-school-green hover:bg-school-green/5' ?>">
+                <span class="text-xl <?= $active === 'home' ? '' : 'opacity-70 group-hover:opacity-100' ?>">🏛️</span>
+                <span>Admin Home</span>
             </a>
-
-            <a href="admin-courses.php"
-               class="block px-4 py-3 rounded-xl text-school-green font-semibold">
-                📚 Manage Courses
+            
+            <a href="admin-manage-course.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl transition font-semibold <?= $active === 'courses' ? 'bg-school-green text-white shadow-md' : 'text-school-green hover:bg-school-green/5' ?>">
+                <span class="text-xl <?= $active === 'courses' ? '' : 'opacity-70 group-hover:opacity-100' ?>">📚</span>
+                <span>Manage Courses</span>
             </a>
-
-            <a href="admin-roles.php"
-               class="block px-4 py-3 rounded-xl bg-school-green text-white font-semibold">
-                🏆 Manage Roles
-            </a>
-
+            
+            <a href="admin-roles.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl transition font-semibold <?= $active === 'roles' ? 'bg-school-green text-white shadow-md' : 'text-school-green hover:bg-school-green/5' ?>">
+                <span class="text-xl <?= $active === 'roles' ? '' : 'opacity-70 group-hover:opacity-100' ?>">🏆</span>
+                <span>Manage Roles</span>
+            </a> 
         </nav>
 
+    </div>
+
+    <div class="mt-8 pt-4 border-t border-gray-200 flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+            <div class="w-9 h-9 rounded-full bg-school-gold text-white flex items-center justify-center font-bold font-sans text-sm shadow-sm">
+                <?= $initials ?>
+            </div>
+            <div>
+                <h4 class="text-sm font-bold text-school-green leading-tight"><?= $full_name ?></h4>
+                <p class="text-xs text-gray-500">Admin Account</p>
+            </div>
+        </div>
+        <a href="logout.php" title="Log Out" class="text-gray-400 hover:text-red-600 transition p-1 text-lg">
+            🚪
+        </a>
     </div>
 
 </aside>
@@ -99,7 +121,7 @@ ORDER BY LastName, FirstName
                 User Roles & Accounts
             </h1>
 
-            <a href="create-user.php"
+            <a href="create-users.php"
                class="bg-school-green text-white px-5 py-3 rounded-xl font-semibold">
                 + Create Account
             </a>
@@ -132,25 +154,25 @@ ORDER BY LastName, FirstName
                 <tr class="border-b">
 
                     <td class="py-4">
-                        <?php echo $row['FirstName'] . " " . $row['LastName']; ?>
+                        <?php echo htmlspecialchars($row['FirstName'] . " " . $row['LastName']); ?>
                     </td>
 
                     <td>
-                        <?php echo $row['Email']; ?>
+                        <?php echo htmlspecialchars($row['Email']); ?>
                     </td>
 
                     <td>
-                        <?php echo $row['RoleName']; ?>
+                        <?php echo htmlspecialchars($row['RoleName']); ?>
                     </td>
 
                     <td>
 
-                        <a href="edit-user.php?id=<?php echo $row['User_ID']; ?>"
+                        <a href="edit-users.php?id=<?php echo urlencode($row['User_ID']); ?>"
                            class="text-blue-600 mr-3">
                             Edit
                         </a>
 
-                        <a href="delete-user.php?id=<?php echo $row['User_ID']; ?>"
+                        <a href="delete-users.php?id=<?php echo urlencode($row['User_ID']); ?>"
                            class="text-red-600">
                             Delete
                         </a>

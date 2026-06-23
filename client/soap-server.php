@@ -1,84 +1,137 @@
 <?php
-include 'db.php'; // Persistent DB connection hook
+// Secure SOAP Web Service Node Architecture - Dual DTD & XSD Pipeline Implementation
+include 'db.php';
 
-class StIvesLmsService {
-    private $pdo_conn;
-
-    public function __construct($pdo) {
-        $this->pdo_conn = $pdo;
+function fetchXmlAcademicTranscript($student_id, $first_name, $last_name, $filter_term) {
+    global $pdo;
+    
+    // Fallback display context label if term tracking parameters are omitted
+    $term_label = "All Enrolled Semesters";
+    
+    // Resolve dynamic term label string from DB if filtered
+    if ($filter_term > 0) {
+        $term_stmt = $pdo->prepare("SELECT TermName FROM Term WHERE Term_ID = :term_id LIMIT 1");
+        $term_stmt->execute([':term_id' => $filter_term]);
+        $fetched_term = $term_stmt->fetchColumn();
+        if ($fetched_term) {
+            $term_label = $fetched_term;
+        }
     }
 
-    // Dynamic data handler matching student query structures
-    public function fetchXmlAcademicTranscript($student_id, $first_name, $last_name) {
-        try {
-            $grades_stmt = $this->pdo_conn->prepare("
-                SELECT c.CourseCode, c.CourseName, cg.FinalGrade, cg.Remarks
-                FROM Enrollment e
-                INNER JOIN Courses c ON e.FK_Course_ID = c.Course_ID
-                LEFT JOIN CourseGrade cg ON e.Enrollment_ID = cg.FK_Enrollment_ID
-                WHERE e.FK_User_ID = :student_id AND e.EnrollmentStatus = 'Enrolled'
-                ORDER BY c.CourseCode ASC
-            ");
-            $grades_stmt->execute([':student_id' => $student_id]);
-            $academic_report = $grades_stmt->fetchAll();
-        } catch (PDOException $e) {
-            return new SoapFault("Server", "Database extraction fault occurred: " . $e->getMessage());
-        }
+    // Build relational join query accurately matching the updated database model
+    $sql = "
+        SELECT 
+            c.CourseCode,
+            c.CourseName,
+            cg.FinalGrade,
+            cg.Remarks
+        FROM Enrollment e
+        INNER JOIN Courses c ON e.FK_Course_ID = c.Course_ID
+        LEFT JOIN CourseGrade cg ON e.Enrollment_ID = cg.FK_Enrollment_ID
+        WHERE e.FK_User_ID = :student_id 
+          AND e.EnrollmentStatus = 'Enrolled'
+    ";
 
-        // Percentage tiers validation fallback layout
-        $getLetter = function($grade) {
-            if ($grade === null) return '—';
-            if ($grade >= 95.00) return 'A+';
-            if ($grade >= 90.00) return 'A';
-            if ($grade >= 85.00) return 'B+';
-            if ($grade >= 80.00) return 'B';
-            if ($grade >= 75.00) return 'C';
-            return 'F';
-        };
+    $params = [':student_id' => $student_id];
 
-        // DOMDocument serialization tree processing loop
-        $dom = new DOMDocument('1.0', 'UTF-8');
-        $dom->formatOutput = true;
+    if ($filter_term > 0) {
+        $sql .= " AND e.FK_Term_ID = :term_id";
+        $params[':term_id'] = $filter_term;
+    }
 
-        $root = $dom->createElement('AcademicReport');
-        $dom->appendChild($root);
+    $sql .= " ORDER BY c.CourseCode ASC";
 
-        $root->appendChild($dom->createElement('StudentName', "$first_name $last_name"));
-        $root->appendChild($dom->createElement('SchoolYear', "S.Y. 2026-2027"));
+    try {
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        $records = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        return "<Error>Database Query Execution Fault: " . htmlspecialchars($e->getMessage()) . "</Error>";
+    }
 
-        $recordsNode = $dom->createElement('CourseRecords');
-        foreach ($academic_report as $row) {
+    // Helper method matching the standard presentation model thresholds
+    function getLetterGrade($grade) {
+        if ($grade === null) return '—';
+        if ($grade >= 95.00) return 'A+';
+        if ($grade >= 90.00) return 'A';
+        if ($grade >= 85.00) return 'B+';
+        if ($grade >= 80.00) return 'B';
+        if ($grade >= 75.00) return 'C';
+        return 'F';
+    }
+
+    // 1. Construct valid XML string referencing the external DTD file
+    $xml = '<?xml version="1.0" encoding="UTF-8"?>';
+    $xml .= '<!DOCTYPE AcademicReport SYSTEM "grades_report.dtd">';
+    $xml .= '<AcademicReport>';
+    $xml .= '  <StudentName>' . htmlspecialchars($first_name . ' ' . $last_name) . '</StudentName>';
+    $xml .= '  <SchoolYear>' . htmlspecialchars($term_label) . '</SchoolYear>';
+    $xml .= '  <CourseRecords>';
+
+    if (empty($records)) {
+        // Fallback placeholder formatting satisfying schema type enforcement bounds
+        $xml .= '    <Record>';
+        $xml .= '      <CourseCode>N/A</CourseCode>';
+        $xml .= '      <CourseName>No enrolled courses found for this term</CourseName>';
+        $xml .= '      <Percentage>0.00</Percentage>';
+        $xml .= '      <LetterGrade>—</LetterGrade>';
+        $xml .= '      <Remarks>No Records</Remarks>';
+        $xml .= '    </Record>';
+    } else {
+        foreach ($records as $row) {
             $is_pending = ($row['FinalGrade'] === null);
-            
-            $recordNode = $dom->createElement('Record');
-            $recordNode->appendChild($dom->createElement('CourseCode', htmlspecialchars($row['CourseCode'])));
-            $recordNode->appendChild($dom->createElement('CourseName', htmlspecialchars($row['CourseName'])));
-            $recordNode->appendChild($dom->createElement('Percentage', $is_pending ? "0.00" : number_format($row['FinalGrade'], 2)));
-            $recordNode->appendChild($dom->createElement('LetterGrade', $getLetter($row['FinalGrade'])));
-            $recordNode->appendChild($dom->createElement('Remarks', $is_pending ? "Pending" : htmlspecialchars($row['Remarks'])));
-            
-            $recordsNode->appendChild($recordNode);
-        }
-        $root->appendChild($recordsNode);
-        $xml_string = $dom->saveXML();
+            // Ensure numeric values strictly adhere to XSD xs:decimal parsing parameters
+            $grade_val  = $is_pending ? "0.00" : number_format($row['FinalGrade'], 2, '.', '');
+            $letter     = getLetterGrade($row['FinalGrade']);
+            $remark     = $is_pending ? "Pending" : $row['Remarks'];
 
-        // Strict XSD Schema validation layer inside the SOAP pipeline
-        if (!$dom->schemaValidate(__DIR__ . '/grades_report.xsd')) {
-            return new SoapFault("Server", "XML verification breakdown against XSD rules.");
+            $xml .= '    <Record>';
+            $xml .= '      <CourseCode>' . htmlspecialchars($row['CourseCode']) . '</CourseCode>';
+            $xml .= '      <CourseName>' . htmlspecialchars($row['CourseName']) . '</CourseName>';
+            $xml .= '      <Percentage>' . $grade_val . '</Percentage>';
+            $xml .= '      <LetterGrade>' . htmlspecialchars($letter) . '</LetterGrade>';
+            $xml .= '      <Remarks>' . htmlspecialchars($remark) . '</Remarks>';
+            $xml .= '    </Record>';
         }
-
-        // Return the clean verified text payload stream to the consumer client
-        return $xml_string;
     }
+
+    $xml .= '  </CourseRecords>';
+    $xml .= '</AcademicReport>';
+
+    // Initialize the validation engine
+    $dom = new DOMDocument();
+    
+    // Enable external entity parsing references so local files can be opened
+    $dom->resolveExternals = true;
+    
+    // Parse the generated text pool array into a queryable DOM object tree framework
+    if (!$dom->loadXML($xml)) {
+        return "<Error>XML Structure Generation Error</Error>";
+    }
+
+    // ── LAYER 1: DTD Structural Validation ──────────────────
+    if (!$dom->validate()) {
+        return "<Error>Layer 1 Grammar Validation Failed: File structure layout breaks rules declared in grades_report.dtd</Error>";
+    }
+
+    // ── LAYER 2: XSD Data Validation ────────────────────────
+    // Compiles your grades_report.xsd file to execute deep data type inspections
+    if (!$dom->schemaValidate(__DIR__ . '/grades_report.xsd')) {
+        return "<Error>Layer 2 Data Validation Failed: Inner tag value properties violate data-type constraints in grades_report.xsd</Error>";
+    }
+
+    // Validation successful; return raw compliant text payload stream to consumer client
+    return $xml;
 }
 
-// Disable WSDL caching for testing environments
-ini_set("soap.wsdl_cache_enabled", "0");
-
 // Initialize server payload mappings in non-WSDL mode
-$options = array('uri' => 'http://localhost/st-ives-lms/soap-server.php');
-$server  = new SoapServer(null, $options);
-$server->setObject(new StIvesLmsService($pdo));
-$server->handle();
-exit;
+try {
+    $server = new SoapServer(null, [
+        'uri' => 'http://localhost/st-ives-lms/soap-server.php'
+    ]);
+    $server->addFunction('fetchXmlAcademicTranscript');
+    $server->handle();
+} catch (SOAPFault $f) {
+    echo "SOAP Server Exception Control Fault: " . $f->getMessage();
+}
 ?>

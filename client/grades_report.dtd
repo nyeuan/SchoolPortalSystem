@@ -1,0 +1,10 @@
+<!ELEMENT AcademicReport (StudentName, SchoolYear, CourseRecords)>
+<!ELEMENT StudentName (#PCDATA)>
+<!ELEMENT SchoolYear (#PCDATA)>
+<!ELEMENT CourseRecords (Record*)>
+<!ELEMENT Record (CourseCode, CourseName, Percentage, LetterGrade, Remarks)>
+<!ELEMENT CourseCode (#PCDATA)>
+<!ELEMENT CourseName (#PCDATA)>
+<!ELEMENT Percentage (#PCDATA)>
+<!ELEMENT LetterGrade (#PCDATA)>
+<!ELEMENT Remarks (#PCDATA)>

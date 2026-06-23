@@ -9,6 +9,51 @@ $last_name  = htmlspecialchars($_SESSION['last_name'] ?? 'User');
 $initials   = strtoupper(substr($first_name, 0, 1) . substr($last_name, 0, 1));
 $full_name  = $first_name . ' ' . $last_name;
 
+$success_msg = null;
+$error_msg = null;
+
+// --- HANDLE NEW GLOBAL ADMIN ANNOUNCEMENT BROADCAST ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'broadcast_admin_announcement') {
+    $title = trim($_POST['title'] ?? '');
+    $message = trim($_POST['message'] ?? '');
+
+    if (!empty($title) && !empty($message)) {
+        try {
+            // First, look for an existing "ADMIN" system course slot, or create it if it doesn't exist
+            $check_course = $pdo->prepare("SELECT Course_ID FROM Courses WHERE CourseCode = 'ADMIN' LIMIT 1");
+            $check_course->execute();
+            $admin_course_id = $check_course->fetchColumn();
+
+            if (!$admin_course_id) {
+                // Automatically generate the Admin System channel if missing
+                $create_course = $pdo->prepare("INSERT INTO Courses (CourseCode, CourseName, Status) VALUES ('ADMIN', 'Global System Announcements', 'Active')");
+                $create_course->execute();
+                $admin_course_id = $pdo->lastInsertId();
+            }
+
+            // Insert the announcement tied directly to the ADMIN channel
+            $insert_stmt = $pdo->prepare("
+                INSERT INTO Announcements (Title, Message, PostDate, FK_Course_ID) 
+                VALUES (:title, :message, NOW(), :course_id)
+            ");
+            $insert_stmt->execute([
+                ':title' => $title,
+                ':message' => $message,
+                ':course_id' => $admin_course_id
+            ]);
+            
+            $success_msg = "Global admin announcement successfully broadcasted to all dashboards.";
+        } catch (PDOException $e) {
+            $error_msg = "Database Error: Could not broadcast entry. " . $e->getMessage();
+        }
+    } else {
+        $error_msg = "Please populate all matching description and text field areas.";
+    }
+}
+
+// Set active navigation context flag
+$active = 'home';
+
 try {
     // 1. Get total system-wide Active Students count
     $student_count_stmt = $pdo->query("
@@ -32,7 +77,7 @@ try {
     $course_count_stmt = $pdo->query("
         SELECT COUNT(*) 
         FROM Courses 
-        WHERE Status = 'Active'
+        WHERE Status = 'Active' AND CourseCode != 'ADMIN'
     ");
     $total_courses = $course_count_stmt->fetchColumn();
 
@@ -48,7 +93,6 @@ try {
     $recent_announcements = $ann_stmt->fetchAll();
 
 } catch (PDOException $e) {
-    // Graceful fallback behavior to protect page construction layout
     $total_students = 0;
     $total_professors = 0;
     $total_courses = 0;
@@ -95,19 +139,15 @@ try {
             <nav class="space-y-2">
                 <a href="admin-homepage.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl bg-school-green text-white font-semibold transition shadow-md">
                     <span class="text-xl">🏛️</span>
-                    <span>Admin Console Home</span>
+                    <span>Admin Home</span>
                 </a>
-                <a href="admin-users.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
-                    <span class="text-xl opacity-70 group-hover:opacity-100">👥</span>
-                    <span>Manage Users</span>
-                </a>
-                <a href="admin-courses.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
+                <a href="admin-manage-course.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
                     <span class="text-xl opacity-70 group-hover:opacity-100">📚</span>
                     <span>Manage Courses</span>
                 </a>
                 <a href="admin-roles.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
                     <span class="text-xl opacity-70 group-hover:opacity-100">🏆</span>
-                    <span>Roles</span>
+                    <span>Manage Roles</span>
                 </a> 
             </nav>
         </div>
@@ -130,6 +170,18 @@ try {
 
     <main class="flex-1 p-4 sm:p-8 overflow-y-auto max-w-7xl mx-auto w-full">
         
+        <?php if ($success_msg): ?>
+            <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl px-5 py-3 mb-4 text-sm font-sans shadow-sm">
+                ✅ <?= htmlspecialchars($success_msg) ?>
+            </div>
+        <?php endif; ?>
+
+        <?php if ($error_msg): ?>
+            <div class="bg-red-50 border border-red-200 text-red-700 rounded-xl px-5 py-3 mb-4 text-sm font-sans shadow-sm">
+                ⚠️ <?= htmlspecialchars($error_msg) ?>
+            </div>
+        <?php endif; ?>
+
         <header class="bg-[#fcfbf7] rounded-2xl p-6 sm:p-8 shadow-lg border border-school-gold/20 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
                 <h1 class="text-3xl font-bold tracking-wide text-school-green">System Administration, <?= $first_name ?>!</h1>
@@ -148,15 +200,16 @@ try {
                     <h3 class="text-xl font-bold text-school-green border-b border-gray-100 pb-3 mb-4">📢 System Broadcast Logs</h3>
                     
                     <?php if (empty($recent_announcements)): ?>
-                        <p class="text-sm text-gray-400 italic">No historical announcements distributed across courses yet.</p>
+                        <p class="text-sm text-gray-400 italic">No historical announcements distributed yet.</p>
                     <?php else: ?>
                         <div class="space-y-4 font-sans">
                             <?php foreach ($recent_announcements as $announcement): ?>
-                                <div class="bg-gray-50 p-3 rounded-xl border border-gray-200/60 relative">
-                                    <span class="absolute top-3 right-3 text-[10px] font-bold uppercase tracking-wider bg-school-gold/10 text-school-gold px-2 py-0.5 rounded">
-                                        <?= htmlspecialchars($announcement['CourseCode']) ?>
+                                <?php $isAdminAnn = ($announcement['CourseCode'] === 'ADMIN'); ?>
+                                <div class="p-3 rounded-xl border relative <?= $isAdminAnn ? 'bg-amber-50/60 border-amber-200' : 'bg-gray-50 border-gray-200/60' ?>">
+                                    <span class="absolute top-3 right-3 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded <?= $isAdminAnn ? 'bg-red-600 text-white' : 'bg-school-gold/10 text-school-gold' ?>">
+                                        <?= $isAdminAnn ? '🚨 Admin Global' : htmlspecialchars($announcement['CourseCode']) ?>
                                     </span>
-                                    <h4 class="font-bold text-school-green text-sm pr-16"><?= htmlspecialchars($announcement['Title']) ?></h4>
+                                    <h4 class="font-bold text-school-green text-sm pr-24"><?= htmlspecialchars($announcement['Title']) ?></h4>
                                     <p class="text-xs text-gray-600 mt-1"><?= htmlspecialchars($announcement['Message']) ?></p>
                                     <span class="text-[10px] text-gray-400 block mt-2">
                                         📅 <?= date('M d, Y @ h:i A', strtotime($announcement['PostDate'])) ?>
@@ -194,20 +247,13 @@ try {
 
             <div class="space-y-6">
                 <section class="bg-[#fcfbf7] rounded-2xl p-6 shadow-lg border border-school-gold/20">
-                    <h3 class="text-lg font-bold text-school-green border-b border-gray-100 pb-2 mb-3">⚡ Admin Administrative Operations</h3>
+                    <h3 class="text-lg font-bold text-school-green border-b border-gray-100 pb-2 mb-3">⚡ Admin Announcement Logs</h3>
                     <div class="grid grid-cols-1 gap-2.5 font-sans">
-                        <a href="admin-users.php" class="p-3 bg-gray-50 rounded-xl hover:bg-school-green/5 border border-gray-200 hover:border-school-green/20 transition flex justify-between items-center text-sm font-medium">
-                            <span>Register / Edit System Accounts</span>
-                            <span class="text-school-green">→</span>
-                        </a>
-                        <a href="admin-courses.php" class="p-3 bg-gray-50 rounded-xl hover:bg-school-green/5 border border-gray-200 hover:border-school-green/20 transition flex justify-between items-center text-sm font-medium">
-                            <span>Create Course Curriculum Slots</span>
-                            <span class="text-school-green">→</span>
-                        </a>
-                        <a href="admin-settings.php" class="p-3 bg-gray-50 rounded-xl hover:bg-school-green/5 border border-gray-200 hover:border-school-green/20 transition flex justify-between items-center text-sm font-medium">
-                            <span>Global LMS System Parameters</span>
-                            <span class="text-school-green">→</span>
-                        </a>
+                        
+                        <button onclick="document.getElementById('broadcastModal').classList.remove('hidden')"
+                                class="w-full text-center p-3 bg-red-700 text-white rounded-xl hover:bg-red-800 transition text-sm font-semibold shadow-sm mb-2 animate-pulse">
+                            🚨 Broadcast Admin Card
+                        </button>
                     </div>
                 </section>
 
@@ -221,6 +267,35 @@ try {
 
         </div>
     </main>
+
+    <div id="broadcastModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl font-sans">
+            <h3 class="text-xl font-bold text-red-700 mb-1">🚨 Broadcast Admin Notice</h3>
+            <p class="text-xs text-gray-400 mb-4 italic">This injects a critical notification card into all Student and Professor homepages.</p>
+            
+            <form action="admin-homepage.php" method="POST">
+                <input type="hidden" name="action" value="broadcast_admin_announcement">
+
+                <label class="block text-sm font-semibold text-gray-600 mb-1">Announcement Heading / Title</label>
+                <input type="text" name="title" required maxlength="150"
+                    class="w-full border border-gray-300 rounded-xl px-4 py-2 mb-4 focus:outline-none focus:ring-2 focus:ring-red-700"
+                    placeholder="e.g., Campus Maintenance Notification">
+
+                <label class="block text-sm font-semibold text-gray-600 mb-1">Message Body Broadcast Content</label>
+                <textarea name="message" required rows="4" maxlength="1000"
+                    class="w-full border border-gray-300 rounded-xl px-4 py-2 mb-6 focus:outline-none focus:ring-2 focus:ring-red-700"
+                    placeholder="Type the message notice details here..."></textarea>
+
+                <div class="flex justify-end gap-3">
+                    <button type="button" onclick="document.getElementById('broadcastModal').classList.add('hidden')"
+                        class="px-4 py-2 rounded-xl text-gray-500 hover:bg-gray-100 transition">Cancel</button>
+                    <button type="submit" class="bg-red-700 text-white px-5 py-2 rounded-xl font-semibold hover:bg-red-800 transition">
+                        Dispatch to Portals
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
 
 </body>
 </html>
