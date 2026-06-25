@@ -17,36 +17,22 @@ if ($action === 'create') {
     }
 
     try {
-        // Start a safe database transaction block
-        $pdo->beginTransaction();
+        // FIXED: Inject the section_id directly into the altered Courses column slot
+        $stmt = $pdo->prepare("INSERT INTO Courses (CourseCode, CourseName, Status, FK_Section_ID) VALUES (?, ?, ?, ?)");
+        $stmt->execute([$code, $name, $status, $section_id]);
 
-        // 1. Insert course instance into Courses table
-        $stmt = $pdo->prepare("INSERT INTO Courses (CourseCode, CourseName, Status) VALUES (?, ?, ?)"); //
-        $stmt->execute([$code, $name, $status]); //
-        $course_id = $pdo->lastInsertId();
-
-        // 2. Link the created course directly to the target Section
-        $link_stmt = $pdo->prepare("INSERT INTO SectionCourses (FK_Section_ID, FK_Course_ID) VALUES (?, ?)");
-        $link_stmt->execute([$section_id, $course_id]);
-
-        $pdo->commit();
-        
-        // Redirect back to the active Grade Level view slot context for convenience
+        // Fetch parent grade for immediate workspace view redirection
         $get_grade = $pdo->prepare("SELECT FK_GradeLevel_ID FROM Section WHERE Section_ID = ?");
         $get_grade->execute([$section_id]);
         $grade_id = $get_grade->fetchColumn() ?: 0;
 
         header('Location: admin-manage-course.php?grade_level_id=' . $grade_id . '&success=course_added');
     } catch (PDOException $e) {
-        if ($pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
         header('Location: admin-manage-course.php?error=missing_fields');
     }
     exit;
 
 } elseif ($action === 'create_section') {
-    // FIXED: Operational entry gate supporting independent Section instantiation matching definition sets
     $section_name   = trim($_POST['section_name'] ?? '');
     $grade_level_id = filter_input(INPUT_POST, 'grade_level_id', FILTER_VALIDATE_INT);
 
@@ -58,7 +44,7 @@ if ($action === 'create') {
     try {
         $stmt = $pdo->prepare("INSERT INTO Section (SectionName, FK_GradeLevel_ID) VALUES (?, ?)");
         $stmt->execute([$section_name, $grade_level_id]);
-        header('Location: admin-manage-course.php?success=section_created');
+        header('Location: admin-manage-course.php?grade_level_id=' . $grade_level_id . '&success=section_created');
     } catch (PDOException $e) {
         header('Location: admin-manage-course.php?error=missing_fields');
     }

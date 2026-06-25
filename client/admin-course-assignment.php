@@ -1,231 +1,154 @@
 <?php
 $required_role = 'Admin';
 
-include 'session_check.php';
-include 'db.php';
+include 'session_check.php'; //
+include 'db.php'; //
 
-$first_name = htmlspecialchars($_SESSION['first_name']);
-$last_name  = htmlspecialchars($_SESSION['last_name']);
-$initials   = strtoupper(substr($first_name, 0, 1) . substr($last_name, 0, 1));
-$full_name  = $first_name . ' ' . $last_name;
+$first_name = htmlspecialchars($_SESSION['first_name']); //
+$last_name  = htmlspecialchars($_SESSION['last_name']); //
+$initials   = strtoupper(substr($first_name, 0, 1) . substr($last_name, 0, 1)); //
+$full_name  = $first_name . ' ' . $last_name; //
 
-$success_msg = null;
-$error_msg = null;
+$success_msg = null; //
+$error_msg = null; //
 
-$course_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+$course_id = isset($_GET['id']) ? (int)$_GET['id'] : 0; //
 
 if ($course_id <= 0) {
-    die("Invalid course.");
+    die("Invalid course."); //
 }
 
-
+// FIXED: Removed the inner join on sectioncourses and switched to strict lowercase table names
 $courseStmt = $pdo->prepare("
-    SELECT *
-    FROM Courses
-    WHERE Course_ID = ?
+    SELECT c.*, sec.Section_ID, sec.SectionName, gl.GradeName
+    FROM courses c
+    INNER JOIN section sec   ON c.FK_Section_ID = sec.Section_ID
+    INNER JOIN gradelevel gl ON sec.FK_GradeLevel_ID = gl.GradeLevel_ID
+    WHERE c.Course_ID = ?
 ");
 
-$courseStmt->execute([$course_id]);
-$course = $courseStmt->fetch();
+$courseStmt->execute([$course_id]); //
+$course = $courseStmt->fetch(); //
 
 if (!$course) {
-    die("Course not found.");
+    die("Course not found."); //
 }
 
+$section_id = (int)$course['Section_ID'];
 
-if (isset($_POST['save'])) {
+// Process form submission updates
+if (isset($_POST['save'])) { //
 
-    $professor = $_POST['professor'] ?? 0;
-    $students  = $_POST['students'] ?? [];
+    $professor = $_POST['professor'] ?? 0; //
+    $students  = $_POST['students'] ?? []; //
 
+    // FIXED: Updated table names to lowercase
     $pdo->prepare("
-        DELETE FROM CourseInstructors
+        DELETE FROM courseinstructors
         WHERE FK_Course_ID = ?
-    ")->execute([$course_id]);
+    ")->execute([$course_id]); //
 
-    if ($professor) {
-
+    if ($professor) { //
         $pdo->prepare("
-            INSERT INTO CourseInstructors
-            (
-                AssignmentDate,
-                FK_Course_ID,
-                FK_User_ID
-            )
+            INSERT INTO courseinstructors
+            (AssignmentDate, FK_Course_ID, FK_User_ID)
             VALUES
-            (
-                CURDATE(),
-                ?,
-                ?
-            )
-        ")->execute([$course_id, $professor]);
-
+            (CURDATE(), ?, ?)
+        ")->execute([$course_id, $professor]); //
     }
 
+    // FIXED: Updated table names to lowercase
     $pdo->prepare("
-        DELETE FROM Enrollment
+        DELETE FROM enrollment
         WHERE FK_Course_ID = ?
-    ")->execute([$course_id]);
+    ")->execute([$course_id]); //
 
-    foreach ($students as $student) {
-
+    foreach ($students as $student) { //
         $pdo->prepare("
-            INSERT INTO Enrollment
-            (
-                EnrollmentDate,
-                EnrollmentStatus,
-                FK_User_ID,
-                FK_Course_ID
-            )
+            INSERT INTO enrollment
+            (EnrollmentDate, EnrollmentStatus, FK_User_ID, FK_Course_ID)
             VALUES
-            (
-                CURDATE(),
-                'Enrolled',
-                ?,
-                ?
-            )
-        ")->execute([$student, $course_id]);
-
+            (CURDATE(), 'Enrolled', ?, ?)
+        ")->execute([$student, $course_id]); //
     }
 
-    header("Location: admin-course-assignment.php?id=$course_id&success=1");
-    exit;
+    header("Location: admin-course-assignment.php?id=$course_id&success=1"); //
+    exit; //
 }
 
-$search = $_GET['search'] ?? '';
+$search = $_GET['search'] ?? ''; //
+$limit = 10; //
 
-$limit = 10;
+$studentPage = isset($_GET['student_page']) ? (int)$_GET['student_page'] : 1; //
+$professorPage = isset($_GET['professor_page']) ? (int)$_GET['professor_page'] : 1; //
 
-$studentPage = isset($_GET['student_page'])
-    ? (int)$_GET['student_page']
-    : 1;
+$studentOffset = ($studentPage - 1) * $limit; //
+$professorOffset = ($professorPage - 1) * $limit; //
 
-$professorPage = isset($_GET['professor_page'])
-    ? (int)$_GET['professor_page']
-    : 1;
-
-$studentOffset = ($studentPage - 1) * $limit;
-$professorOffset = ($professorPage - 1) * $limit;
-
-
+// Professor Count: Role = 2 (Lowercase users table)
 $countProfessor = $pdo->prepare("
-SELECT COUNT(*)
-FROM Users
-WHERE FK_Role_ID = 2
-AND (
-    FirstName LIKE ?
-    OR LastName LIKE ?
-)
+    SELECT COUNT(*) FROM users
+    WHERE FK_Role_ID = 2
+    AND (FirstName LIKE ? OR LastName LIKE ?)
 ");
+$countProfessor->execute(["%$search%", "%$search%"]); //
+$totalProfessors = $countProfessor->fetchColumn(); //
+$totalProfessorPages = ceil($totalProfessors / $limit); //
 
-$countProfessor->execute([
-    "%$search%",
-    "%$search%"
-]);
-
-$totalProfessors = $countProfessor->fetchColumn();
-$totalProfessorPages = ceil($totalProfessors / $limit);
-
+// Student Count: Role = 3 filtered strictly by section
 $countStudent = $pdo->prepare("
-SELECT COUNT(*)
-FROM Users
-WHERE FK_Role_ID = 3
-AND (
-    FirstName LIKE ?
-    OR LastName LIKE ?
-)
+    SELECT COUNT(*) FROM users
+    WHERE FK_Role_ID = 3 AND FK_Section_ID = :section_id
+    AND (FirstName LIKE :search OR LastName LIKE :search)
 ");
+$countStudent->execute([':section_id' => $section_id, ':search' => "%$search%"]);
+$totalStudents = $countStudent->fetchColumn(); //
+$totalStudentPages = ceil($totalStudents / $limit); //
 
-$countStudent->execute([
-    "%$search%",
-    "%$search%"
-]);
-
-$totalStudents = $countStudent->fetchColumn();
-$totalStudentPages = ceil($totalStudents / $limit);
-
+// Fetch Professors List
 $stmt = $pdo->prepare("
-SELECT *
-FROM Users
-WHERE FK_Role_ID = 2
-AND (
-    FirstName LIKE ?
-    OR LastName LIKE ?
-)
-ORDER BY LastName ASC, FirstName ASC
-LIMIT $limit OFFSET $professorOffset
+    SELECT * FROM users
+    WHERE FK_Role_ID = 2
+    AND (FirstName LIKE ? OR LastName LIKE ?)
+    ORDER BY LastName ASC, FirstName ASC
+    LIMIT $limit OFFSET $professorOffset
 ");
+$stmt->execute(["%$search%", "%$search%"]); //
+$professors = $stmt->fetchAll(); //
 
-$stmt->execute([
-    "%$search%",
-    "%$search%"
-]);
-
-$professors = $stmt->fetchAll();
-
+// Fetch Students List
 $stmt = $pdo->prepare("
-SELECT *
-FROM Users
-WHERE FK_Role_ID = 3
-AND (
-    FirstName LIKE ?
-    OR LastName LIKE ?
-)
-ORDER BY LastName ASC, FirstName ASC
-LIMIT $limit OFFSET $studentOffset
+    SELECT * FROM users
+    WHERE FK_Role_ID = 3 AND FK_Section_ID = :section_id
+    AND (FirstName LIKE :search OR LastName LIKE :search)
+    ORDER BY LastName ASC, FirstName ASC
+    LIMIT :limit OFFSET :offset
 ");
-
-$stmt->execute([
-    "%$search%",
-    "%$search%"
-]);
-
+$stmt->bindValue(':section_id', $section_id, PDO::PARAM_INT);
+$stmt->bindValue(':search', "%$search%", PDO::PARAM_STR);
+$stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+$stmt->bindValue(':offset', $studentOffset, PDO::PARAM_INT);
+$stmt->execute();
 $students = $stmt->fetchAll();
 
-$currentProfessor = $pdo->prepare("
-    SELECT FK_User_ID
-    FROM CourseInstructors
-    WHERE FK_Course_ID = ?
-");
+// Resolve active references maps (Lowercase tables)
+$currentProfessor = $pdo->prepare("SELECT FK_User_ID FROM courseinstructors WHERE FK_Course_ID = ?"); //
+$currentProfessor->execute([$course_id]); //
+$currentProfessor = $currentProfessor->fetchColumn(); //
 
-$currentProfessor->execute([$course_id]);
+$currentStudents = $pdo->prepare("SELECT FK_User_ID FROM enrollment WHERE FK_Course_ID = ?"); //
+$currentStudents->execute([$course_id]); //
+$currentStudents = $currentStudents->fetchAll(PDO::FETCH_COLUMN); //
 
-$currentProfessor = $currentProfessor->fetchColumn();
-
-
-$currentStudents = $pdo->prepare("
-    SELECT FK_User_ID
-    FROM Enrollment
-    WHERE FK_Course_ID = ?
-");
-
-$currentStudents->execute([$course_id]);
-
-$currentStudents = $currentStudents->fetchAll(PDO::FETCH_COLUMN);
-
-$first_name = $_SESSION['first_name'];
-$last_name  = $_SESSION['last_name'];
-
-$initials = strtoupper(
-    substr($first_name, 0, 1) .
-    substr($last_name, 0, 1)
-);
-
-$full_name = $first_name . " " . $last_name;
-
-$active = 'courses';
-
-$success = isset($_GET['success']);
+$success = isset($_GET['success']); //
 ?>
-
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-
-    <title>Assign Users</title>
-
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Assign Users - St. Ives School</title>
     <script src="https://cdn.tailwindcss.com"></script>
-
     <script>
         tailwind.config = {
             theme: {
@@ -242,237 +165,130 @@ $success = isset($_GET['success']);
             }
         }
     </script>
-
 </head>
+<body class="bg-gradient-to-br from-school-green via-[#125730] to-school-yellow min-h-screen font-serif text-gray-800 flex flex-col md:flex-row">
 
-<body class="bg-gradient-to-br from-school-green via-[#125730] to-school-yellow min-h-screen">
+    <?php include 'sidebar.php'; ?>
 
-    <aside class="fixed top-0 left-0 h-screen w-64 bg-[#fcfbf7] border-r border-school-gold/20 flex flex-col justify-between p-6 shadow-xl z-50">
-        <div>
-            <div class="flex items-center space-x-3 mb-8 pb-4 border-b border-gray-200">
-                <img src="stiveslogo.png" alt="St. Ives School Logo" class="h-12 w-12 object-contain drop-shadow-sm">
-                <div>
-                    <h2 class="font-bold text-school-green tracking-wide leading-tight">St. Ives School</h2>
-                    <p class="text-xs text-gray-500 italic">Wisdom & Charity</p>
-                </div>
+    <main class="ml-0 md:ml-64 flex-1 p-4 sm:p-8 overflow-y-auto h-screen w-full">
+
+        <?php if ($success) { ?>
+            <div id="successMessage" class="mb-6 rounded-xl bg-green-100 border border-green-400 text-green-700 px-5 py-4 shadow font-sans text-sm">
+                ✅ Assignments have been updated successfully.
             </div>
-            <nav class="space-y-2">
-                <a href="admin-homepage.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl transition font-semibold <?= $active === 'home' ? 'bg-school-green text-white shadow-md' : 'text-school-green hover:bg-school-green/5' ?>">
-                    <span class="text-xl <?= $active === 'home' ? '' : 'opacity-70 group-hover:opacity-100' ?>">🏛️</span>
-                    <span>Admin Home</span>
-                </a>
-                
-                <a href="admin-manage-course.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl transition font-semibold <?= $active === 'courses' ? 'bg-school-green text-white shadow-md' : 'text-school-green hover:bg-school-green/5' ?>">
-                    <span class="text-xl <?= $active === 'courses' ? '' : 'opacity-70 group-hover:opacity-100' ?>">📚</span>
-                    <span>Manage Courses</span>
-                </a>
-                
-                <a href="admin-roles.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl transition font-semibold <?= $active === 'roles' ? 'bg-school-green text-white shadow-md' : 'text-school-green hover:bg-school-green/5' ?>">
-                    <span class="text-xl <?= $active === 'roles' ? '' : 'opacity-70 group-hover:opacity-100' ?>">🏆</span>
-                    <span>Manage Roles</span>
-                </a> 
-            </nav>
-        </div>
-        <div class="mt-8 pt-4 border-t border-gray-200 flex items-center justify-between">
-            <div class="flex items-center space-x-3">
-                <div class="w-9 h-9 rounded-full bg-school-gold text-white flex items-center justify-center font-bold text-sm">
-                    <?= $initials ?>
-                </div>
-                <div>
-                    <h4 class="text-sm font-bold text-school-green"><?= $full_name ?></h4>
-                    <p class="text-xs text-gray-500">Admin Account</p>
-                </div>
-            </div>
-            <a href="logout.php" class="text-gray-400 hover:text-red-600 transition p-1 text-lg">🚪</a>
-        </div>
-    </aside>
+            <script>
+                setTimeout(function () {
+                    document.getElementById("successMessage").style.display = "none";
+                }, 3000);
+            </script>
+        <?php } ?>
 
-    <main class="ml-64 h-screen overflow-y-auto p-8">
-
-    <?php if ($success) { ?>
-
-        <div
-            id="successMessage"
-            class="mb-6 rounded-xl bg-green-100 border border-green-400 text-green-700 px-5 py-4 shadow">
-            ✅ Assignments have been updated successfully.
-        </div>
-
-        <script>
-            setTimeout(function () {
-                document.getElementById("successMessage").style.display = "none";
-            }, 3000);
-        </script>
-
-    <?php } ?>
-
-    <div class="max-w-7xl mx-auto bg-white rounded-3xl p-8 shadow-lg">
-        <h1 class="text-3xl font-bold text-school-green">
-            Assign Users
-        </h1>
-
-        <p class="text-gray-500 mb-6">
-            <?= htmlspecialchars($course['CourseCode']) ?>
-            -
-            <?= htmlspecialchars($course['CourseName']) ?>
-        </p>
-
-        <form method="GET" class="mb-8 flex gap-3">
-
-            <input
-                type="hidden"
-                name="id"
-                value="<?= $course_id ?>">
-
-            <input
-                type="text"
-                name="search"
-                value="<?= htmlspecialchars($search) ?>"
-                placeholder="Search professor or student..."
-                class="flex-1 border border-gray-300 rounded-xl px-4 py-3">
-
-            <button
-                type="submit"
-                class="bg-school-green text-white px-6 rounded-xl hover:bg-school-green-hover">
-
-                Search
-
-            </button>
-
-            <?php if($search != ''){ ?>
-
-                <a
-                    href="admin-course-assignment.php?id=<?= $course_id ?>"
-                    class="px-6 py-3 rounded-xl bg-gray-200">
-
-                    Reset
-
-                </a>
-
-            <?php } ?>
-
-        </form>
-
-        <form method="POST">
-
-            <div class="grid grid-cols-2 gap-10">
-
-                <div class="flex flex-col h-[500px] border rounded-xl p-5">
-
-                    <h2 class="font-bold text-xl mb-4">
-                        Professor
-                    </h2>
-
-                    <div class="flex-1 overflow-y-auto">
-
-                        <?php foreach ($professors as $prof) { ?>
-
-                            <label class="flex gap-2 mb-3">
-
-                                <input
-                                    type="radio"
-                                    name="professor"
-                                    value="<?= $prof['User_ID'] ?>"
-                                    <?= ($currentProfessor == $prof['User_ID']) ? 'checked' : '' ?>>
-
-                                <?= $prof['FirstName'] . " " . $prof['LastName'] ?>
-
-                            </label>
-
-                        <?php } ?>
-
-                    </div>
-
-                    <div class="flex justify-center gap-2 mt-4">
-
-                        <?php for($i = 1; $i <= $totalProfessorPages; $i++) { ?>
-
-                            <a
-                                href="?id=<?= $course_id ?>&search=<?= urlencode($search) ?>&professor_page=<?= $i ?>&student_page=<?= $studentPage ?>"
-                                class="w-10 h-10 flex items-center justify-center rounded-lg <?= ($i == $professorPage) ? 'bg-school-green text-white' : 'bg-gray-200' ?>">
-
-                                <?= $i ?>
-
-                            </a>
-
-                        <?php } ?>
-
-                    </div>
-
-                </div>
-
-                <div class="flex flex-col h-[500px] border rounded-xl p-5">
-
-                    <h2 class="font-bold text-xl mb-4">
-                        Students
-                    </h2>
-
-                    <div class="flex-1 overflow-y-auto">
-
-                        <?php foreach ($students as $student) { ?>
-
-                            <label class="flex gap-2 mb-2">
-
-                                <input
-                                    type="checkbox"
-                                    name="students[]"
-                                    value="<?= $student['User_ID'] ?>"
-                                    <?= in_array($student['User_ID'], $currentStudents) ? 'checked' : '' ?>>
-
-                                <?= $student['FirstName'] . " " . $student['LastName'] ?>
-
-                            </label>
-
-                        <?php } ?>
-
-                    </div>
-
-                    <div class="flex justify-center gap-2 mt-4">
-
-                        <?php for($i = 1; $i <= $totalStudentPages; $i++) { ?>
-
-                            <a
-                                href="?id=<?= $course_id ?>&search=<?= urlencode($search) ?>&student_page=<?= $i ?>&professor_page=<?= $professorPage ?>"
-                                class="w-10 h-10 flex items-center justify-center rounded-lg <?= ($i == $studentPage) ? 'bg-school-green text-white' : 'bg-gray-200' ?>">
-
-                                <?= $i ?>
-
-                            </a>
-
-                        <?php } ?>
-
-                    </div>
-
-                </div>
-
+        <div class="max-w-7xl mx-auto bg-[#fcfbf7] rounded-3xl p-6 sm:p-8 shadow-lg border border-school-gold/20">
+            
+            <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1.5 font-sans">
+                <span><?= htmlspecialchars($course['GradeName']) ?></span>
+                <span class="text-school-gold font-bold">&gt;</span>
+                <span><?= htmlspecialchars($course['SectionName']) ?></span>
+                <span class="text-school-gold font-bold">&gt;</span>
+                <span class="text-school-green">Course User Management Matrix</span>
             </div>
 
-            <div class="mt-8 flex items-center gap-4">
+            <h1 class="text-3xl font-bold text-school-green">
+                Assign Users
+            </h1>
+            <p class="text-gray-600 italic font-sans text-sm mt-1">
+                Course Slot: <b><?= htmlspecialchars($course['CourseCode']) ?></b> - <?= htmlspecialchars($course['CourseName']) ?>
+            </p>
 
-                <button
-                    type="submit"
-                    name="save"
-                    class="bg-school-green text-white px-6 py-3 rounded-xl hover:bg-school-green-hover transition">
-
-                    Save Assignments
-
+            <form method="GET" class="my-6 flex gap-3 font-sans">
+                <input type="hidden" name="id" value="<?= $course_id ?>">
+                <input type="text" name="search" value="<?= htmlspecialchars($search) ?>"
+                    placeholder="Search roster directory by name keywords..."
+                    class="flex-1 border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-school-green">
+                <button type="submit" class="bg-school-green text-white px-6 rounded-xl hover:bg-school-green-hover transition text-sm font-semibold">
+                    Search
                 </button>
+                <?php if($search != ''){ ?>
+                    <a href="admin-course-assignment.php?id=<?= $course_id ?>" class="px-5 py-2.5 rounded-xl bg-gray-200 text-sm text-gray-700 flex items-center justify-center hover:bg-gray-300 transition">
+                        Reset
+                    </a>
+                <?php } ?>
+            </form>
 
-                <a
-                    href="admin-manage-course.php"
-                    class="px-6 py-3 rounded-xl border border-school-green text-school-green font-semibold hover:bg-school-green hover:text-white transition">
+            <form method="POST">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 font-sans">
+                    
+                    <div class="flex flex-col h-[450px] border bg-white rounded-2xl p-5 shadow-sm">
+                        <h2 class="font-bold text-lg text-school-green border-b pb-2 mb-4">
+                            🧑‍🏫 Assign Faculty Instructor
+                        </h2>
+                        <div class="flex-1 overflow-y-auto pr-1 text-sm space-y-2.5">
+                            <label class="flex items-center gap-2 text-gray-500 italic pb-1">
+                                <input type="radio" name="professor" value="0" <?= (empty($currentProfessor)) ? 'checked' : '' ?> class="text-school-green focus:ring-school-green">
+                                Unassigned / No Instructor
+                            </label>
+                            <?php foreach ($professors as $prof) { ?>
+                                <label class="flex items-center gap-2 hover:bg-gray-50 p-1.5 rounded-lg transition cursor-pointer">
+                                    <input type="radio" name="professor" value="<?= $prof['User_ID'] ?>" <?= ($currentProfessor == $prof['User_ID']) ? 'checked' : '' ?> class="text-school-green focus:ring-school-green">
+                                    <span><?= htmlspecialchars($prof['FirstName'] . " " . $prof['LastName']) ?></span>
+                                </label>
+                            <?php } ?>
+                        </div>
+                        <?php if ($totalProfessorPages > 1): ?>
+                            <div class="flex justify-center gap-1 mt-4 pt-3 border-t">
+                                <?php for($i = 1; $i <= $totalProfessorPages; $i++) { ?>
+                                    <a href="?id=<?= $course_id ?>&search=<?= urlencode($search) ?>&professor_page=<?= $i ?>&student_page=<?= $studentPage ?>"
+                                       class="w-7 h-7 text-xs font-bold flex items-center justify-center rounded-md <?= ($i == $professorPage) ? 'bg-school-green text-white shadow' : 'bg-gray-100 text-school-green hover:bg-school-green/10' ?>">
+                                        <?= $i ?>
+                                    </a>
+                                <?php } ?>
+                            </div>
+                        <?php endif; ?>
+                    </div>
 
-                    ← Back
+                    <div class="flex flex-col h-[450px] border bg-white rounded-2xl p-5 shadow-sm">
+                        <h2 class="font-bold text-lg text-school-green border-b pb-2 mb-2 flex justify-between items-center">
+                            <span>👨‍🎓 Enrolled Students</span>
+                            <span class="text-xs bg-school-gold/10 text-school-gold font-semibold px-2 py-0.5 rounded">
+                                Section: <?= htmlspecialchars($course['SectionName']) ?>
+                            </span>
+                        </h2>
+                        <div class="flex-1 overflow-y-auto pr-1 text-sm space-y-2.5 mt-2">
+                            <?php if (empty($students)): ?>
+                                <p class="text-gray-400 italic text-center pt-10">No students are currently mapped to this section.</p>
+                            <?php else: ?>
+                                <?php foreach ($students as $student) { ?>
+                                    <label class="flex items-center gap-2 hover:bg-gray-50 p-1.5 rounded-lg transition cursor-pointer">
+                                        <input type="checkbox" name="students[]" value="<?= $student['User_ID'] ?>" <?= in_array($student['User_ID'], $currentStudents) ? 'checked' : '' ?> class="rounded text-school-green focus:ring-school-green">
+                                        <span><?= htmlspecialchars($student['FirstName'] . " " . $student['LastName']) ?></span>
+                                    </label>
+                                <?php } ?>
+                            <?php endif; ?>
+                        </div>
+                        <?php if ($totalStudentPages > 1): ?>
+                            <div class="flex justify-center gap-1 mt-4 pt-3 border-t">
+                                <?php for($i = 1; $i <= $totalStudentPages; $i++) { ?>
+                                    <a href="?id=<?= $course_id ?>&search=<?= urlencode($search) ?>&student_page=<?= $i ?>&professor_page=<?= $professorPage ?>"
+                                       class="w-7 h-7 text-xs font-bold flex items-center justify-center rounded-md <?= ($i == $studentPage) ? 'bg-school-green text-white shadow' : 'bg-gray-100 text-school-green hover:bg-school-green/10' ?>">
+                                        <?= $i ?>
+                                    </a>
+                                <?php } ?>
+                            </div>
+                        <?php endif; ?>
+                    </div>
 
-                </a>
+                </div>
 
-            </div>
-
-        </form>
-
-    </div>
-
-</main>
-
+                <div class="mt-8 flex items-center gap-3 font-sans">
+                    <button type="submit" name="save" class="bg-school-green text-white px-6 py-3 rounded-xl font-semibold hover:bg-school-green-hover transition shadow">
+                        Save Assignments
+                    </button>
+                    <a href="admin-manage-course.php" class="px-6 py-3 rounded-xl border border-gray-300 text-gray-700 bg-white font-semibold hover:bg-gray-50 transition">
+                        ← Back to Directory
+                    </a>
+                </div>
+            </form>
+        </div>
+    </main>
 </body>
-
 </html>
