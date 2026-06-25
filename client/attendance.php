@@ -15,7 +15,7 @@ if (!$course_id) { header('Location: courses.php'); exit; }
 // Parameters Setup
 $status_filter = trim($_GET['status_filter'] ?? '');
 $page = max(1, (int)($_GET['page'] ?? 1));
-$limit = 8;
+$limit = 10;
 $offset = ($page - 1) * $limit;
 
 try {
@@ -187,6 +187,24 @@ $active = 'attendance';
                         <?php endif; ?>
                     </tbody>
                 </table>
+                
+                <!-- Pagination Controls -->
+                 <div class="p-4 bg-gray-50 border-t flex flex-col sm:flex-row justify-between items-center gap-3 font-sans text-xs border-t border-gray-100">
+                    <p class="text-gray-500 font-medium">Showing rows <?= min($total_rows, $offset + 1) ?> to <?= min($total_rows, $offset + $limit) ?> of <?= $total_rows ?> entries</p>
+                    <div class="flex items-center gap-2">
+                        <?php if ($page > 1): ?>
+                            <a href="?course_id=<?= $course_id ?>&page=<?= $page - 1 ?>&status_filter=<?= urlencode($status_filter) ?>" class="px-3 py-1.5 rounded-lg bg-gray-200 hover:bg-gray-300 font-semibold text-gray-600 transition">← Prev</a>
+                        <?php endif; ?>
+                        
+                        <span class="font-semibold text-gray-600">Page <?= $page ?> of <?= $total_pages ?></span>
+                        
+                        <?php if ($page < $total_pages): ?>
+                            <a href="?course_id=<?= $course_id ?>&page=<?= $page + 1 ?>&status_filter=<?= urlencode($status_filter) ?>" class="px-3 py-1.5 rounded-lg bg-gray-200 hover:bg-gray-300 font-semibold text-gray-600 transition">Next →</a>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
+                
             </div>
         </section>
 
