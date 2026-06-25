@@ -39,10 +39,12 @@ try {
         exit;
     }
 
-    // 1. Total Count for Pagination calculation
+    // 1. Total Count for Pagination calculation (Filtered by Section Course Scope)
     $count_sql = "
-        SELECT COUNT(*) FROM Enrollment e 
+        SELECT COUNT(DISTINCT u.User_ID) 
+        FROM Enrollment e 
         INNER JOIN Users u ON e.FK_User_ID = u.User_ID 
+        INNER JOIN SectionCourses sc ON e.FK_Course_ID = sc.FK_Course_ID AND u.FK_Section_ID = sc.FK_Section_ID
         WHERE e.FK_Course_ID = :course_id AND e.EnrollmentStatus = 'Enrolled'
     ";
     if ($search !== '') {
@@ -55,11 +57,12 @@ try {
     $total_rows = $count_stmt->fetchColumn();
     $total_pages = max(1, ceil($total_rows / $limit));
 
-    // 2. Paginated Data Fetch
+    // 2. Paginated Data Fetch (Filtered by Section Course Scope)
     $student_sql = "
         SELECT u.FirstName, u.LastName, u.Email, u.Gender, u.Status 
         FROM Enrollment e 
         INNER JOIN Users u ON e.FK_User_ID = u.User_ID 
+        INNER JOIN SectionCourses sc ON e.FK_Course_ID = sc.FK_Course_ID AND u.FK_Section_ID = sc.FK_Section_ID
         WHERE e.FK_Course_ID = :course_id AND e.EnrollmentStatus = 'Enrolled'
     ";
     if ($search !== '') {
