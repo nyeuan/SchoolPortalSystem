@@ -40,16 +40,50 @@ try {
         exit;
     }
 
-    // 2. Roster of actively enrolled students
-    $roster_stmt = $pdo->prepare("
+    // --- SEARCH AND PAGINATION INITIALIZATION ---
+    $search = trim($_GET['search'] ?? '');
+    $page = max(1, (int)($_GET['page'] ?? 1));
+    $limit = 10; 
+    $offset = ($page - 1) * $limit;
+
+    // 2a. Fetch total records for pagination counting
+    $count_sql = "
+        SELECT COUNT(*) 
+        FROM Enrollment e
+        INNER JOIN Users u ON e.FK_User_ID = u.User_ID
+        WHERE e.FK_Course_ID = :course_id AND e.EnrollmentStatus = 'Enrolled'
+    ";
+    if ($search !== '') {
+        $count_sql .= " AND (u.FirstName LIKE :search OR u.LastName LIKE :search)";
+    }
+    $count_stmt = $pdo->prepare($count_sql);
+    $count_params = [':course_id' => $course_id];
+    if ($search !== '') { $count_params[':search'] = '%' . $search . '%'; }
+    $count_stmt->execute($count_params);
+    $total_items = $count_stmt->fetchColumn();
+    $total_pages = ceil($total_items / $limit);
+
+    // 2b. Roster of actively enrolled students (Filtered & Paginated)
+    $roster_sql = "
         SELECT u.User_ID, u.FirstName, u.LastName
         FROM Enrollment e
         INNER JOIN Users u ON e.FK_User_ID = u.User_ID
         WHERE e.FK_Course_ID = :course_id AND e.EnrollmentStatus = 'Enrolled'
-        ORDER BY u.LastName ASC, u.FirstName ASC
-    ");
-    $roster_stmt->execute([':course_id' => $course_id]);
+    ";
+    if ($search !== '') {
+        $roster_sql .= " AND (u.FirstName LIKE :search OR u.LastName LIKE :search)";
+    }
+    // Removed SQL LIMIT/OFFSET so client-side JavaScript handles pagination safely without wiping radio inputs
+    $roster_sql .= " ORDER BY u.LastName ASC, u.FirstName ASC";
+
+    $roster_stmt = $pdo->prepare($roster_sql);
+    $roster_stmt->bindValue(':course_id', $course_id, PDO::PARAM_INT);
+    if ($search !== '') {
+        $roster_stmt->bindValue(':search', '%' . $search . '%', PDO::PARAM_STR);
+    }
+    $roster_stmt->execute();
     $roster = $roster_stmt->fetchAll();
+    // --------------------------------------------
 
     // 3. Existing attendance records for the selected date, keyed by student
     $existing_stmt = $pdo->prepare("
@@ -122,42 +156,9 @@ $next_date = date('Y-m-d', strtotime($selected_date . ' +1 day'));
 </head>
 <body class="bg-gradient-to-br from-school-green via-[#125730] to-school-yellow min-h-screen font-serif text-gray-800 flex flex-col md:flex-row">
 
-    <aside class="w-full md:w-64 bg-[#fcfbf7] border-b md:border-b-0 md:border-r border-school-gold/20 flex flex-col justify-between p-6 shrink-0 shadow-xl md:min-h-screen">
-        <div>
-            <div class="flex items-center space-x-3 mb-8 pb-4 border-b border-gray-200">
-                <img src="stiveslogo.png" alt="St. Ives School Logo" class="h-12 w-12 object-contain drop-shadow-sm">
-                <div>
-                    <h2 class="font-bold text-school-green tracking-wide leading-tight">St. Ives School</h2>
-                    <p class="text-xs text-gray-500 italic">Wisdom & Charity</p>
-                </div>
-            </div>
-            <nav class="space-y-2">
-                <a href="prof-homepage.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
-                    <span>🏛️</span><span>Institution Home</span>
-                </a>
-                <a href="prof-courses.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl bg-school-green text-white font-semibold transition shadow-md">
-                    <span>📚</span><span>Courses</span>
-                </a>
-                
-                <a href="Account-info.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
-                    <span class="text-xl opacity-70 group-hover:opacity-100">👤</span>
-                    <span>Account</span>
-                </a>
-            </nav>
-        </div>
-        <div class="mt-8 pt-4 border-t border-gray-200 flex items-center justify-between">
-            <div class="flex items-center space-x-3">
-                <div class="w-9 h-9 rounded-full bg-school-gold text-white flex items-center justify-center font-bold font-sans text-sm shadow-sm"><?= $initials ?></div>
-                <div>
-                    <h4 class="text-sm font-bold text-school-green leading-tight"><?= $full_name ?></h4>
-                    <p class="text-xs text-gray-500">Professor Account</p>
-                </div>
-            </div>
-            <a href="logout.php" class="text-gray-400 hover:text-red-600 transition p-1 text-lg">🚪</a>
-        </div>
-    </aside>
+    <?php include 'sidebar.php'; ?>
 
-    <main class="flex-1 p-4 sm:p-8 overflow-y-auto max-w-6xl mx-auto w-full">
+    <main class="ml-0 md:ml-64 flex-1 p-4 sm:p-8 min-h-screen w-full">
         <a href="manage-course.php?course_id=<?= $course_id ?>" class="inline-flex items-center text-sm text-white/90 hover:text-white mb-4 font-sans font-medium">
             ← Back to Manage Course
         </a>
@@ -215,6 +216,22 @@ $next_date = date('Y-m-d', strtotime($selected_date . ' +1 day'));
                 </div>
             <?php endif; ?>
         </section>
+        
+        <section class="bg-[#fcfbf7] rounded-3xl p-5 shadow-lg border border-school-gold/20 mb-6 font-sans">
+            <form onsubmit="return false;" class="flex flex-col sm:flex-row items-center gap-3">
+                <input type="hidden" name="course_id" value="<?= $course_id ?>">
+                <input type="hidden" name="date" value="<?= htmlspecialchars($selected_date) ?>">
+                <div class="w-full flex-1">
+                    <input type="text" id="clientSearchInput" placeholder="Search student name..." 
+                           class="w-full border border-gray-300 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-school-green text-sm">
+                </div>
+                <div class="flex gap-2 w-full sm:w-auto">
+                    <button type="button" id="clearSearchBtn" class="w-full sm:w-auto text-center border border-gray-300 text-gray-500 hover:bg-gray-100 px-4 py-2 rounded-xl text-sm font-semibold transition hidden">
+                        Clear
+                    </button>
+                </div>
+            </form>
+        </section>
 
         <!-- roster form -->
         <section class="bg-[#fcfbf7] rounded-3xl shadow-lg border border-school-gold/20 overflow-hidden">
@@ -241,7 +258,7 @@ $next_date = date('Y-m-d', strtotime($selected_date . ' +1 day'));
                                     <th class="py-4 px-6 font-semibold text-right w-48">Course History</th>
                                 </tr>
                             </thead>
-                            <tbody class="divide-y divide-gray-200 text-sm bg-white">
+                            <tbody id="attendanceRosterBody" class="divide-y divide-gray-200 text-sm bg-white">
                                 <?php foreach ($roster as $student): ?>
                                     <?php
                                         $uid = $student['User_ID'];
@@ -280,14 +297,24 @@ $next_date = date('Y-m-d', strtotime($selected_date . ' +1 day'));
                                     </tr>
                                 <?php endforeach; ?>
                             </tbody>
+
                         </table>
                     </div>
-
-                    <div class="p-6 flex justify-end border-t border-gray-100">
+                                    
+                    <div class="p-6 flex flex-col md:flex-row justify-between items-center gap-4 border-t border-gray-100 font-sans">
                         <button type="submit"
-                            class="bg-school-green text-white px-6 py-3 rounded-2xl font-semibold hover:bg-school-green-hover transition">
+                            class="bg-school-green text-white px-6 py-3 rounded-2xl font-semibold hover:bg-school-green-hover transition w-full md:w-auto order-last md:order-first">
                             Save Attendance for <?= date('M d, Y', strtotime($selected_date)) ?>
                         </button>
+
+                        <div class="p-4 bg-gray-50 rounded-xl border flex flex-col sm:flex-row justify-between items-center gap-3 text-xs w-full md:w-auto">
+                            <p id="paginationTrackerText" class="text-gray-500 font-medium">Showing rows 0 to 0 of 0 entries</p>
+                            <div class="flex items-center gap-2">
+                                <button type="button" id="prevPageBtn" class="px-3 py-1.5 rounded-lg bg-gray-200 hover:bg-gray-300 font-semibold text-gray-600 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">← Prev</button>
+                                <span id="pageTrackerLabel" class="font-semibold text-gray-600">Page 1 of 1</span>
+                                <button type="button" id="nextPageBtn" class="px-3 py-1.5 rounded-lg bg-gray-200 hover:bg-gray-300 font-semibold text-gray-600 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">Next →</button>
+                            </div>
+                        </div>
                     </div>
                 </form>
 
@@ -296,5 +323,113 @@ $next_date = date('Y-m-d', strtotime($selected_date . ' +1 day'));
         </section>
 
     </main>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const itemsPerPage = 10;
+            let currentPage = 1;
+            let filteredRows = [];
+
+            const searchInput = document.getElementById("clientSearchInput");
+            const clearBtn = document.getElementById("clearSearchBtn");
+            const rosterBody = document.getElementById("attendanceRosterBody");
+            const allRows = Array.from(rosterBody.querySelectorAll("tr:not(.no-data-row)"));
+            
+            const prevBtn = document.getElementById("prevPageBtn");
+            const nextBtn = document.getElementById("nextPageBtn");
+            const pageLabel = document.getElementById("pageTrackerLabel");
+            const trackerText = document.getElementById("paginationTrackerText");
+
+            // Build dynamic text fallback element for blank searches
+            const noDataRow = document.createElement("tr");
+            noDataRow.className = "no-data-row hidden";
+            noDataRow.innerHTML = `<td colspan="6" class="py-8 px-6 text-center text-gray-400 italic">No matching student names found.</td>`;
+            rosterBody.appendChild(noDataRow);
+
+            function updatePagination() {
+                const searchTerm = searchInput.value.toLowerCase().trim();
+                
+                // 1. Filter rows based on search parameters
+                filteredRows = allRows.filter(row => {
+                    const studentName = row.cells[0].textContent.toLowerCase();
+                    return studentName.includes(searchTerm);
+                });
+
+                // Control "Clear Search" button appearance
+                if (searchTerm.length > 0) {
+                    clearBtn.classList.remove("hidden");
+                } else {
+                    clearBtn.classList.add("hidden");
+                }
+
+                // Handle no matching entries safely
+                if (filteredRows.length === 0) {
+                    noDataRow.classList.remove("hidden");
+                    allRows.forEach(row => row.classList.add("hidden"));
+                    trackerText.textContent = "Showing rows 0 to 0 of 0 entries";
+                    pageLabel.textContent = "Page 1 of 1";
+                    prevBtn.disabled = true;
+                    nextBtn.disabled = true;
+                    return;
+                } else {
+                    noDataRow.classList.add("hidden");
+                }
+
+                // 2. Bound total calculation range boundaries
+                const totalItems = filteredRows.length;
+                const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
+                
+                if (currentPage > totalPages) currentPage = totalPages;
+                if (currentPage < 1) currentPage = 1;
+
+                const startIdx = (currentPage - 1) * itemsPerPage;
+                const endIdx = Math.min(startIdx + itemsPerPage, totalItems);
+
+                // 3. Render visible elements safely without shifting checked values
+                allRows.forEach(row => row.classList.add("hidden"));
+                for (let i = startIdx; i < endIdx; i++) {
+                    filteredRows[i].classList.remove("hidden");
+                }
+
+                // 4. Match metadata counters in system text boxes
+                trackerText.textContent = `Showing rows ${startIdx + 1} to ${endIdx} of ${totalItems} entries`;
+                pageLabel.textContent = `Page ${currentPage} of ${totalPages}`;
+
+                // Control availability of buttons
+                prevBtn.disabled = (currentPage === 1);
+                nextBtn.disabled = (currentPage === totalPages);
+            }
+
+            // Event Listeners for Pagination
+            prevBtn.addEventListener("click", () => {
+                if (currentPage > 1) {
+                    currentPage--;
+                    updatePagination();
+                }
+            });
+
+            nextBtn.addEventListener("click", () => {
+                const totalPages = Math.ceil(filteredRows.length / itemsPerPage) || 1;
+                if (currentPage < totalPages) {
+                    currentPage++;
+                    updatePagination();
+                }
+            });
+
+            // Instant live search handler
+            searchInput.addEventListener("input", () => {
+                currentPage = 1;
+                updatePagination();
+            });
+
+            clearBtn.addEventListener("click", () => {
+                searchInput.value = "";
+                currentPage = 1;
+                updatePagination();
+            });
+
+            // Run initial pagination sequence on window load
+            updatePagination();
+        });
+    </script>
 </body>
 </html>

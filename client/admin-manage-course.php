@@ -8,6 +8,9 @@ $last_name  = htmlspecialchars($_SESSION['last_name']);
 $initials   = strtoupper(substr($first_name, 0, 1) . substr($last_name, 0, 1));
 $full_name  = $first_name . ' ' . $last_name;
 
+$success_msg = null;
+$error_msg = null;
+
 // Handle search queries matching against CourseCode or CourseName
 $search = isset($_GET['search']) ? trim($_GET['search']) : '';
 
@@ -71,7 +74,7 @@ $active = 'courses';
 </head>
 <body class="bg-gradient-to-br from-school-green via-[#125730] to-school-yellow min-h-screen font-serif text-gray-800 flex flex-col md:flex-row">
 
-    <aside class="w-full md:w-64 bg-[#fcfbf7] border-b md:border-b-0 md:border-r border-school-gold/20 flex flex-col justify-between p-6 shrink-0 shadow-xl md:min-h-screen">
+    <aside class="fixed top-0 left-0 h-screen w-64 bg-[#fcfbf7] border-r border-school-gold/20 flex flex-col justify-between p-6 shadow-xl z-50">
         <div>
             <div class="flex items-center space-x-3 mb-8 pb-4 border-b border-gray-200">
                 <img src="stiveslogo.png" alt="St. Ives School Logo" class="h-12 w-12 object-contain drop-shadow-sm">
@@ -81,39 +84,35 @@ $active = 'courses';
                 </div>
             </div>
             <nav class="space-y-2">
-                <a href="admin-homepage.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl transition font-semibold <?= $active === 'home' ? 'bg-school-green text-white shadow-md' : 'text-school-green hover:bg-school-green/5' ?>">
-                    <span class="text-xl <?= $active === 'home' ? '' : 'opacity-70 group-hover:opacity-100' ?>">🏛️</span>
+                <a href="admin-homepage.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
+                    <span class="text-xl">🏛️</span>
                     <span>Admin Home</span>
                 </a>
-                
-                <a href="admin-manage-course.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl transition font-semibold <?= $active === 'courses' ? 'bg-school-green text-white shadow-md' : 'text-school-green hover:bg-school-green/5' ?>">
-                    <span class="text-xl <?= $active === 'courses' ? '' : 'opacity-70 group-hover:opacity-100' ?>">📚</span>
+                <a href="admin-manage-course.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl bg-school-green text-white font-semibold transition shadow-md">
+                    <span class="text-xl opacity-70 group-hover:opacity-100">📚</span>
                     <span>Manage Courses</span>
                 </a>
-                
-                <a href="admin-roles.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl transition font-semibold <?= $active === 'roles' ? 'bg-school-green text-white shadow-md' : 'text-school-green hover:bg-school-green/5' ?>">
-                    <span class="text-xl <?= $active === 'roles' ? '' : 'opacity-70 group-hover:opacity-100' ?>">🏆</span>
+                <a href="admin-roles.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
+                    <span class="text-xl opacity-70 group-hover:opacity-100">🏆</span>
                     <span>Manage Roles</span>
                 </a> 
             </nav>
         </div>
         <div class="mt-8 pt-4 border-t border-gray-200 flex items-center justify-between">
             <div class="flex items-center space-x-3">
-                <div class="w-9 h-9 rounded-full bg-school-gold text-white flex items-center justify-center font-bold font-sans text-sm shadow-sm">
+                <div class="w-9 h-9 rounded-full bg-school-gold text-white flex items-center justify-center font-bold text-sm">
                     <?= $initials ?>
                 </div>
                 <div>
-                    <h4 class="text-sm font-bold text-school-green leading-tight"><?= $full_name ?></h4>
+                    <h4 class="text-sm font-bold text-school-green"><?= $full_name ?></h4>
                     <p class="text-xs text-gray-500">Admin Account</p>
                 </div>
             </div>
-            <a href="logout.php" title="Log Out" class="text-gray-400 hover:text-red-600 transition p-1 text-lg">
-                🚪
-            </a>
+            <a href="logout.php" class="text-gray-400 hover:text-red-600 transition p-1 text-lg">🚪</a>
         </div>
     </aside>
 
-    <main class="flex-1 p-4 sm:p-8 overflow-y-auto max-w-6xl mx-auto w-full">
+    <main class="ml-64 flex-1 p-4 sm:p-8 overflow-y-auto h-screen">
         
         <?php if ($success_msg): ?>
             <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl px-5 py-3 mb-4 text-sm font-sans">
@@ -178,15 +177,33 @@ $active = 'courses';
                             </h3>
                         </div>
                         <div class="mt-6 flex justify-between items-center border-t pt-4 border-gray-100">
-                            <span class="text-xs text-gray-400">Database Index: #<?= (int)$course['Course_ID'] ?></span>
-                            <form action="admin-add-course.php" method="POST" onsubmit="return confirm('Confirm complete removal of this entry selection from global lists?');">
-                                <input type="hidden" name="action" value="delete">
-                                <input type="hidden" name="course_id" value="<?= (int)$course['Course_ID'] ?>">
-                                <button type="submit" class="text-xs font-semibold bg-red-50 text-red-600 border border-red-200 px-3 py-1.5 rounded-lg hover:bg-red-100 transition">
-                                    Delete Entry
-                                </button>
-                            </form>
+
+                            <div class="flex gap-2">
+
+                                <a href="admin-course-assignment.php?id=<?= $course['Course_ID'] ?>"
+                                    class="text-xs font-semibold bg-blue-50 text-blue-600 border border-blue-200 px-3 py-1.5 rounded-lg hover:bg-blue-100 transition">
+                                        Assign Users
+                                    </a>
+
+                                <form action="admin-add-course.php"
+                                    method="POST"
+                                    onsubmit="return confirm('Confirm complete removal of this entry selection from global lists?');">
+
+                                    <input type="hidden" name="action" value="delete">
+                                    <input type="hidden" name="course_id"
+                                        value="<?= (int)$course['Course_ID'] ?>">
+
+                                    <button type="submit"
+                                            class="text-xs font-semibold bg-red-50 text-red-600 border border-red-200 px-3 py-1.5 rounded-lg hover:bg-red-100 transition">
+                                        Delete Entry
+                                    </button>
+
+                                </form>
+
+                            </div>
+
                         </div>
+
                     </div>
                 <?php endforeach; ?>
             </div>

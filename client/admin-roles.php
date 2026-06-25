@@ -1,18 +1,59 @@
 <?php
-// Ensure session variables are active for the sidebar layout
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+$required_role = 'Admin';
+include 'session_check.php';
+include 'db.php'; 
 
-include 'db.php';
-
-// Profile badge assignments matching the session data
+// Fetch Admin credentials safely from current session
 $first_name = htmlspecialchars($_SESSION['first_name'] ?? 'Admin');
 $last_name  = htmlspecialchars($_SESSION['last_name'] ?? 'User');
 $initials   = strtoupper(substr($first_name, 0, 1) . substr($last_name, 0, 1));
 $full_name  = $first_name . ' ' . $last_name;
 
-$stmt = $pdo->query("
+$success_msg = null;
+$error_msg = null;
+
+
+$limit = 5;
+
+$page = isset($_GET['page'])
+    ? (int)$_GET['page']
+    : 1;
+
+$offset = ($page - 1) * $limit;
+
+$search = $_GET['search'] ?? '';
+
+$where = '';
+
+if($search != ''){
+
+    $where = "
+    WHERE
+        FirstName LIKE '%$search%'
+        OR LastName LIKE '%$search%'
+        OR Email LIKE '%$search%'
+        OR RoleName LIKE '%$search%'
+    ";
+}
+
+$countQuery = "
+SELECT COUNT(*)
+FROM Users
+INNER JOIN Role
+ON Users.FK_Role_ID = Role.Role_ID
+$where
+";
+
+$totalRows = $pdo
+    ->query($countQuery)
+    ->fetchColumn();
+
+$totalPages = max(
+    1,
+    ceil($totalRows / $limit)
+);
+
+$sql = "
 SELECT
     User_ID,
     FirstName,
@@ -22,10 +63,14 @@ SELECT
 FROM Users
 INNER JOIN Role
 ON Users.FK_Role_ID = Role.Role_ID
+$where
 ORDER BY LastName, FirstName
-");
+LIMIT $limit OFFSET $offset
+";
 
-$active = 'roles';
+$stmt = $pdo->query($sql);
+
+
 ?>
 
 <!DOCTYPE html>
@@ -55,63 +100,49 @@ $active = 'roles';
     </script>
 </head>
 
-<body class="bg-gradient-to-br from-school-green via-[#125730] to-school-yellow min-h-screen font-serif text-gray-800 flex flex-col md:flex-row">
+<body class="bg-gradient-to-br from-school-green via-[#125730] to-school-yellow min-h-screen">
 
-<aside class="w-full md:w-64 bg-[#fcfbf7] border-r border-school-gold/20 flex flex-col justify-between p-6 shadow-xl md:min-h-screen shrink-0">
-
-    <div>
-
-        <div class="flex items-center space-x-3 mb-8 pb-4 border-b">
-            <img src="stiveslogo.png" class="h-12 w-12">
-
-            <div>
-                <h2 class="font-bold text-school-green">
-                    St. Ives School
-                </h2>
-
-                <p class="text-xs text-gray-500 italic">
-                    Wisdom & Charity
-                </p>
+<aside class="fixed top-0 left-0 h-screen w-64 bg-[#fcfbf7] border-r border-school-gold/20 flex flex-col justify-between p-6 shadow-xl z-50">
+        <div>
+            <div class="flex items-center space-x-3 mb-8 pb-4 border-b border-gray-200">
+                <img src="stiveslogo.png" alt="St. Ives School Logo" class="h-12 w-12 object-contain drop-shadow-sm">
+                <div>
+                    <h2 class="font-bold text-school-green tracking-wide leading-tight">St. Ives School</h2>
+                    <p class="text-xs text-gray-500 italic">Wisdom & Charity</p>
+                </div>
             </div>
+
+            <nav class="space-y-2">
+                <a href="admin-homepage.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
+                    <span class="text-xl">🏛️</span>
+                    <span>Admin Home</span>
+                </a>
+                <a href="admin-manage-course.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
+                    <span class="text-xl opacity-70 group-hover:opacity-100">📚</span>
+                    <span>Manage Courses</span>
+                </a>
+                <a href="admin-roles.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl bg-school-green text-white font-semibold transition shadow-md">
+                    <span class="text-xl opacity-70 group-hover:opacity-100">🏆</span>
+                    <span>Manage Roles</span>
+                </a> 
+            </nav>
         </div>
 
-        <nav class="space-y-2">
-            <a href="admin-homepage.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl transition font-semibold <?= $active === 'home' ? 'bg-school-green text-white shadow-md' : 'text-school-green hover:bg-school-green/5' ?>">
-                <span class="text-xl <?= $active === 'home' ? '' : 'opacity-70 group-hover:opacity-100' ?>">🏛️</span>
-                <span>Admin Home</span>
-            </a>
-            
-            <a href="admin-manage-course.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl transition font-semibold <?= $active === 'courses' ? 'bg-school-green text-white shadow-md' : 'text-school-green hover:bg-school-green/5' ?>">
-                <span class="text-xl <?= $active === 'courses' ? '' : 'opacity-70 group-hover:opacity-100' ?>">📚</span>
-                <span>Manage Courses</span>
-            </a>
-            
-            <a href="admin-roles.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl transition font-semibold <?= $active === 'roles' ? 'bg-school-green text-white shadow-md' : 'text-school-green hover:bg-school-green/5' ?>">
-                <span class="text-xl <?= $active === 'roles' ? '' : 'opacity-70 group-hover:opacity-100' ?>">🏆</span>
-                <span>Manage Roles</span>
-            </a> 
-        </nav>
-
-    </div>
-
-    <div class="mt-8 pt-4 border-t border-gray-200 flex items-center justify-between">
-        <div class="flex items-center space-x-3">
-            <div class="w-9 h-9 rounded-full bg-school-gold text-white flex items-center justify-center font-bold font-sans text-sm shadow-sm">
-                <?= $initials ?>
+        <div class="mt-8 pt-4 border-t border-gray-200 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-9 h-9 rounded-full bg-school-gold text-white flex items-center justify-center font-bold text-sm">
+                    <?= $initials ?>
+                </div>
+                <div>
+                    <h4 class="text-sm font-bold text-school-green"><?= $full_name ?></h4>
+                    <p class="text-xs text-gray-500">Admin Account</p>
+                </div>
             </div>
-            <div>
-                <h4 class="text-sm font-bold text-school-green leading-tight"><?= $full_name ?></h4>
-                <p class="text-xs text-gray-500">Admin Account</p>
-            </div>
+            <a href="logout.php" class="text-gray-400 hover:text-red-600 transition p-1 text-lg">🚪</a>
         </div>
-        <a href="logout.php" title="Log Out" class="text-gray-400 hover:text-red-600 transition p-1 text-lg">
-            🚪
-        </a>
-    </div>
+    </aside>
 
-</aside>
-
-<main class="flex-1 p-8">
+<main class="ml-64 h-screen overflow-y-auto p-8">
 
     <section class="bg-white rounded-2xl p-6 shadow-lg mb-6">
 
@@ -127,6 +158,14 @@ $active = 'roles';
             </a>
 
         </div>
+        <form method="GET" class="mb-4">
+            <input
+                type="text"
+                name="search"
+                placeholder="Search name, email, or role..."
+                value="<?php echo $_GET['search'] ?? ''; ?>"
+                class="w-full border border-gray-300 rounded-xl px-4 py-3">
+        </form>
 
     </section>
 
@@ -149,47 +188,186 @@ $active = 'roles';
 
             <tbody>
 
-            <?php while($row = $stmt->fetch()) { ?>
+                <?php
+
+                $users = $stmt->fetchAll();
+
+                if(count($users) == 0) {
+
+                ?>
+
+                <tr>
+                    <td colspan="4" class="text-center py-8 text-gray-500">
+                        No users found.
+                    </td>
+                </tr>
+
+                <?php
+
+                } else {
+
+                foreach($users as $row) {
+
+                ?>
 
                 <tr class="border-b">
 
                     <td class="py-4">
-                        <?php echo htmlspecialchars($row['FirstName'] . " " . $row['LastName']); ?>
+                        <?php echo $row['FirstName'] . " " . $row['LastName']; ?>
                     </td>
 
                     <td>
-                        <?php echo htmlspecialchars($row['Email']); ?>
+                        <?php echo $row['Email']; ?>
                     </td>
 
                     <td>
-                        <?php echo htmlspecialchars($row['RoleName']); ?>
+                        <?php echo $row['RoleName']; ?>
                     </td>
 
                     <td>
 
-                        <a href="edit-users.php?id=<?php echo urlencode($row['User_ID']); ?>"
-                           class="text-blue-600 mr-3">
+                        <a href="edit-users.php?id=<?php echo $row['User_ID']; ?>"
+                        class="text-blue-600 mr-3 font-semibold">
                             Edit
                         </a>
 
-                        <a href="delete-users.php?id=<?php echo urlencode($row['User_ID']); ?>"
-                           class="text-red-600">
+                        <button
+                            type="button"
+                            onclick="openDeleteModal(
+                                <?php echo $row['User_ID']; ?>,
+                                '<?php echo $row['FirstName'] . ' ' . $row['LastName']; ?>'
+                            )"
+                            class="text-red-600 font-semibold">
+
                             Delete
-                        </a>
+
+                        </button>
 
                     </td>
 
                 </tr>
 
-            <?php } ?>
+                <?php
+
+                }
+
+                }
+
+                ?>
 
             </tbody>
 
         </table>
+        <div class="flex justify-center items-center gap-2 mt-6 flex-wrap">
 
+            <?php if ($page > 1) { ?>
+
+                <a
+                    href="?page=<?= $page - 1 ?>&search=<?= urlencode($search) ?>"
+                    class="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300">
+
+                    ← Prev
+
+                </a>
+
+            <?php } ?>
+
+            <?php
+                $start = max(1, $page - 2);
+                $end   = min($totalPages, $page + 2);
+
+                for ($i = $start; $i <= $end; $i++) {
+            ?>
+
+                <a
+                    href="?page=<?= $i ?>&search=<?= urlencode($search) ?>"
+                    class="px-4 py-2 rounded-lg <?= ($page == $i) ? 'bg-school-green text-white' : 'bg-gray-200 hover:bg-gray-300' ?>">
+
+                    <?= $i ?>
+
+                </a>
+
+            <?php } ?>
+
+            <?php if ($page < $totalPages) { ?>
+
+                <a
+                    href="?page=<?= $page + 1 ?>&search=<?= urlencode($search) ?>"
+                    class="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300">
+
+                    Next →
+
+                </a>
+
+            <?php } ?>
+
+        </div>
     </section>
 
 </main>
+<div
+    id="deleteModal"
+    class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
 
+    <div class="bg-white rounded-2xl p-6 shadow-2xl w-full max-w-md">
+
+        <h2 class="text-2xl font-bold text-red-600 mb-4">
+            Delete User
+        </h2>
+
+        <p id="deleteMessage" class="text-gray-700 mb-6">
+        </p>
+
+        <div class="flex justify-end gap-3">
+
+            <button
+                 type="button"
+                onclick="closeDeleteModal()"
+                class="px-4 py-2 rounded-lg bg-gray-300 hover:bg-gray-400 transition">
+
+                Cancel
+
+            </button>
+
+            <a
+                id="confirmDeleteBtn"
+                href="#"
+                class="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition">
+
+                Delete
+
+            </a>
+
+        </div>
+
+    </div>
+
+</div>
+
+<script>
+
+function openDeleteModal(userId, userName){
+
+    document.getElementById("deleteModal")
+        .classList.remove("hidden");
+
+    document.getElementById("deleteMessage")
+        .innerHTML =
+        "Are you sure you want to delete <strong>" +
+        userName +
+        "</strong>?";
+
+    document.getElementById("confirmDeleteBtn")
+        .href =
+        "delete-users.php?id=" + userId;
+}
+
+function closeDeleteModal(){
+
+    document.getElementById("deleteModal")
+        .classList.add("hidden");
+}
+
+</script>
 </body>
 </html>

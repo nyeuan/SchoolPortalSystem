@@ -33,9 +33,10 @@ if(isset($_POST['create'])) {
     )
     ";
 
-    $conn->query($sql);
+    $pdo->exec($sql);
 
     header("Location: admin-roles.php");
+    exit();
 }
 
 ?>

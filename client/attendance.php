@@ -10,75 +10,60 @@ $full_name  = $first_name . ' ' . $last_name;
 $student_id = $_SESSION['user_id'];
 
 $course_id = filter_input(INPUT_GET, 'course_id', FILTER_VALIDATE_INT);
+if (!$course_id) { header('Location: courses.php'); exit; }
 
-if (!$course_id) {
-    header('Location: courses.php');
-    exit;
-}
+// Parameters Setup
+$status_filter = trim($_GET['status_filter'] ?? '');
+$page = max(1, (int)($_GET['page'] ?? 1));
+$limit = 8;
+$offset = ($page - 1) * $limit;
 
 try {
-    // Confirm enrollment and grab course info
-    $enroll_stmt = $pdo->prepare("
-        SELECT e.Enrollment_ID, c.Course_ID, c.CourseCode, c.CourseName
-        FROM Enrollment e
-        INNER JOIN Courses c ON e.FK_Course_ID = c.Course_ID
-        WHERE e.FK_Course_ID = :course_id AND e.FK_User_ID = :student_id
-    ");
-    $enroll_stmt->execute([
-        ':course_id'  => $course_id,
-        ':student_id' => $student_id,
-    ]);
+    $enroll_stmt = $pdo->prepare("SELECT e.Enrollment_ID, c.Course_ID, c.CourseCode, c.CourseName FROM Enrollment e INNER JOIN Courses c ON e.FK_Course_ID = c.Course_ID WHERE e.FK_Course_ID = :course_id AND e.FK_User_ID = :student_id");
+    $enroll_stmt->execute([':course_id' => $course_id, ':student_id' => $student_id]);
     $course = $enroll_stmt->fetch();
+    if (!$course) { header('Location: courses.php?error=not_enrolled'); exit; }
 
-    if (!$course) {
-        header('Location: courses.php?error=not_enrolled');
-        exit;
-    }
+    // Gather overall tallies (unpaginated summary counts)
+    $tally_stmt = $pdo->prepare("SELECT Status FROM Attendance WHERE FK_Course_ID = :course_id AND FK_Student_ID = :student_id");
+    $tally_stmt->execute([':course_id' => $course_id, ':student_id' => $student_id]);
+    $all_records = $tally_stmt->fetchAll();
 
-    // All attendance records for this student in this course, most recent first
-    $attendance_stmt = $pdo->prepare("
-        SELECT Attendance_ID, AttendanceDate, Status
-        FROM Attendance
-        WHERE FK_Course_ID = :course_id AND FK_Student_ID = :student_id
-        ORDER BY AttendanceDate DESC
-    ");
-    $attendance_stmt->execute([
-        ':course_id'  => $course_id,
-        ':student_id' => $student_id,
-    ]);
-    $records = $attendance_stmt->fetchAll();
+    // 1. Pagination Row Counting
+    $count_sql = "SELECT COUNT(*) FROM Attendance WHERE FK_Course_ID = :course_id AND FK_Student_ID = :student_id";
+    if ($status_filter !== '') { $count_sql .= " AND Status = :status"; }
+    $count_stmt = $pdo->prepare($count_sql);
+    $count_params = [':course_id' => $course_id, ':student_id' => $student_id];
+    if ($status_filter !== '') { $count_params[':status'] = $status_filter; }
+    $count_stmt->execute($count_params);
+    $total_rows = $count_stmt->fetchColumn();
+    $total_pages = max(1, ceil($total_rows / $limit));
 
-} catch (PDOException $e) {
-    die("Database Error: " . $e->getMessage());
-}
+    // 2. Fetch Paginated Records
+    $rec_sql = "SELECT Attendance_ID, AttendanceDate, Status FROM Attendance WHERE FK_Course_ID = :course_id AND FK_Student_ID = :student_id";
+    if ($status_filter !== '') { $rec_sql .= " AND Status = :status"; }
+    $rec_sql .= " ORDER BY AttendanceDate DESC LIMIT :limit OFFSET :offset";
 
-// Tallies for the summary cards
-$present_count = 0;
-$late_count    = 0;
-$absent_count  = 0;
-foreach ($records as $r) {
+    $records_stmt = $pdo->prepare($rec_sql);
+    $records_stmt->bindValue(':course_id', $course_id, PDO::PARAM_INT);
+    $records_stmt->bindValue(':student_id', $student_id, PDO::PARAM_INT);
+    if ($status_filter !== '') { $records_stmt->bindValue(':status', $status_filter, PDO::PARAM_STR); }
+    $records_stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+    $records_stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+    $records_stmt->execute();
+    $records = $records_stmt->fetchAll();
+
+} catch (PDOException $e) { die("Database Error: " . $e->getMessage()); }
+
+// Process metrics summaries using unpaginated structural metrics fields
+$present_count = $late_count = $absent_count = 0;
+foreach ($all_records as $r) {
     if ($r['Status'] === 'Present') $present_count++;
     elseif ($r['Status'] === 'Late') $late_count++;
     elseif ($r['Status'] === 'Absent') $absent_count++;
 }
-$total_count = count($records);
-$attendance_rate = $total_count > 0
-    ? round((($present_count + $late_count) / $total_count) * 100, 1)
-    : null;
-
-function statusBadge($status) {
-    switch ($status) {
-        case 'Present':
-            return '<span class="inline-block text-xs font-semibold bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-full border border-emerald-200">✅ Present</span>';
-        case 'Late':
-            return '<span class="inline-block text-xs font-semibold bg-amber-50 text-amber-700 px-3 py-1.5 rounded-full border border-amber-200">⏰ Late</span>';
-        case 'Absent':
-            return '<span class="inline-block text-xs font-semibold bg-red-50 text-red-600 px-3 py-1.5 rounded-full border border-red-200">❌ Absent</span>';
-        default:
-            return '<span class="inline-block text-xs font-semibold bg-gray-100 text-gray-400 px-3 py-1.5 rounded-full border border-gray-200">' . htmlspecialchars($status) . '</span>';
-    }
-}
-
+$total_count = count($all_records);
+$attendance_rate = $total_count > 0 ? round((($present_count + $late_count) / $total_count) * 100, 1) : null;
 $active = 'attendance';
 ?>
 
@@ -113,61 +98,10 @@ $active = 'attendance';
 <body class="bg-gradient-to-br from-school-green via-[#125730] to-school-yellow min-h-screen font-serif text-gray-800 flex flex-col md:flex-row">
 
     <!-- sidebar -->
-    <aside class="w-full md:w-64 bg-[#fcfbf7] border-b md:border-b-0 md:border-r border-school-gold/20 flex flex-col justify-between p-6 shrink-0 shadow-xl md:min-h-screen">
-        <div>
-            <div class="flex items-center space-x-3 mb-8 pb-4 border-b border-gray-200">
-                <img src="stiveslogo.png" alt="St. Ives School Logo" class="h-12 w-12 object-contain drop-shadow-sm">
-                <div>
-                    <h2 class="font-bold text-school-green tracking-wide leading-tight">St. Ives School</h2>
-                    <p class="text-xs text-gray-500 italic">Wisdom & Charity</p>
-                </div>
-            </div>
-
-            <nav class="space-y-2">
-                <a href="homepage.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
-                    <span class="text-xl">🏛️</span>
-                    <span>Institution Home</span>
-                </a>
-
-                <a href="courses.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl bg-school-green text-white font-semibold transition shadow-md">
-                    <span class="text-xl">📚</span>
-                    <span>Courses</span>
-                </a>
-
-                <a href="activities.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
-                    <span class="text-xl opacity-70 group-hover:opacity-100">🏆</span>
-                    <span>Activities</span>
-                </a>
-
-                <a href="grades.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
-                    <span class="text-xl opacity-70 group-hover:opacity-100">📊</span>
-                    <span>Grades</span>
-                </a>
-                <a href="Account-info.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
-                    <span class="text-xl opacity-70 group-hover:opacity-100">👤</span>
-                    <span>Account</span>
-                </a>
-            </nav>
-        </div>
-
-        <div class="mt-8 pt-4 border-t border-gray-200 flex items-center justify-between">
-            <div class="flex items-center space-x-3">
-                <div class="w-9 h-9 rounded-full bg-school-gold text-white flex items-center justify-center font-bold font-sans text-sm shadow-sm">
-                    <?= $initials ?>
-                </div>
-                <div>
-                    <h4 class="text-sm font-bold text-school-green leading-tight"><?= $full_name ?></h4>
-                    <p class="text-xs text-gray-500">Student Account</p>
-                </div>
-            </div>
-            <a href="logout.php" title="Log Out" class="text-gray-400 hover:text-red-600 transition p-1 text-lg">
-                🚪
-            </a>
-        </div>
-    </aside>
+    <?php include 'sidebar.php'; ?>
 
     <!-- main content -->
-    <main class="flex-1 p-4 sm:p-8 overflow-y-auto max-w-6xl mx-auto w-full">
+    <main class="ml-0 md:ml-64 flex-1 p-4 sm:p-8 overflow-y-auto min-h-screen w-full">
 
         <a href="view-course.php?course_id=<?= $course_id ?>" class="inline-flex items-center text-sm text-white/90 hover:text-white mb-4 font-sans font-medium">
             ← Back to Course
@@ -223,6 +157,7 @@ $active = 'attendance';
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-100 text-sm font-sans">
+                        
                         <?php if (empty($records)): ?>
                             <tr>
                                 <td colspan="2" class="py-8 px-6 text-center text-gray-400 italic">No attendance has been recorded for this course yet.</td>
@@ -234,7 +169,18 @@ $active = 'attendance';
                                         <?= date('l, M d, Y', strtotime($r['AttendanceDate'])) ?>
                                     </td>
                                     <td class="py-4 px-6">
-                                        <?= statusBadge($r['Status']) ?>
+                                        <?php 
+                                        $status = htmlspecialchars($r['Status']);
+                                        if ($status === 'Present') {
+                                            echo '<span class="inline-block text-xs font-semibold px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200">Present</span>';
+                                        } elseif ($status === 'Late') {
+                                            echo '<span class="inline-block text-xs font-semibold px-2.5 py-1 rounded-xl bg-amber-50 text-amber-700 border border-amber-200">Late</span>';
+                                        } elseif ($status === 'Absent') {
+                                            echo '<span class="inline-block text-xs font-semibold px-2.5 py-1 rounded-xl bg-red-50 text-red-700 border border-red-200">Absent</span>';
+                                        } else {
+                                            echo '<span class="inline-block text-xs font-semibold px-2.5 py-1 rounded-xl bg-gray-50 text-gray-500 border border-gray-200">Unmarked</span>';
+                                        }
+                                        ?>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>

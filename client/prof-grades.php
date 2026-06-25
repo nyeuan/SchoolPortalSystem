@@ -7,83 +7,118 @@ $first_name = htmlspecialchars($_SESSION['first_name']);
 $last_name  = htmlspecialchars($_SESSION['last_name']);
 $initials   = strtoupper(substr($first_name, 0, 1) . substr($last_name, 0, 1));
 $full_name  = $first_name . ' ' . $last_name;
+$user_id    = $_SESSION['user_id'];
 
 $course_id = filter_input(INPUT_GET, 'course_id', FILTER_VALIDATE_INT);
-
 if (!$course_id) {
     header('Location: prof-courses.php');
     exit;
 }
 
+// ── Search & Server-Side Pagination Processing Parameters ──────
+$search        = trim($_GET['search'] ?? '');
+$remark_filter = trim($_GET['remark_filter'] ?? '');
+$page          = max(1, (int)($_GET['page'] ?? 1));
+$limit         = 10; 
+$offset        = ($page - 1) * $limit;
+
+$success_msg = $_GET['success'] ?? null;
+
 try {
-    // 1. Verify this professor actually teaches this course
+    // Verify professor is assigned to this course
     $auth_stmt = $pdo->prepare("
         SELECT c.Course_ID, c.CourseCode, c.CourseName 
         FROM Courses c
         INNER JOIN CourseInstructors ci ON c.Course_ID = ci.FK_Course_ID
         WHERE c.Course_ID = :course_id AND ci.FK_User_ID = :user_id
     ");
-    $auth_stmt->execute([
-        ':course_id' => $course_id,
-        ':user_id'   => $_SESSION['user_id']
-    ]);
+    $auth_stmt->execute([':course_id' => $course_id, ':user_id' => $user_id]);
     $course = $auth_stmt->fetch();
-
     if (!$course) {
         header('Location: prof-courses.php?error=not_authorized');
         exit;
     }
 
-    // 2. Fetch all published assignments for this course to construct our breakdown header columns/lists
-    $assignments_stmt = $pdo->prepare("
-        SELECT Assignment_ID, Title, MaxScore 
+    // ── RESTORED: Fetch all assignments created for this course ──
+    $asg_stmt = $pdo->prepare("
+        SELECT a.Assignment_ID, a.Title, a.MaxScore 
         FROM Assignments a
         INNER JOIN CourseModule cm ON a.FK_CourseModule_ID = cm.CourseModule_ID
         WHERE cm.FK_Course_ID = :course_id
         ORDER BY a.DueDate ASC
     ");
-    $assignments_stmt->execute([':course_id' => $course_id]);
-    $course_assignments = $assignments_stmt->fetchAll();
+    $asg_stmt->execute([':course_id' => $course_id]);
+    $course_assignments = $asg_stmt->fetchAll();
 
-    // 3. Fetch all enrolled students along with their final grade records
-    $students_stmt = $pdo->prepare("
+    // ── RESTORED: Fetch all student submissions to map into the matrix lookup ──
+    $sub_stmt = $pdo->prepare("
+        SELECT sub.FK_User_ID, sub.FK_Assignment_ID, sub.Score
+        FROM AssignmentSubmission sub
+        INNER JOIN Assignments a ON sub.FK_Assignment_ID = a.Assignment_ID
+        INNER JOIN CourseModule cm ON a.FK_CourseModule_ID = cm.CourseModule_ID
+        WHERE cm.FK_Course_ID = :course_id
+    ");
+    $sub_stmt->execute([':course_id' => $course_id]);
+    $submissions_raw = $sub_stmt->fetchAll();
+
+    // Restructure into a matrix map row array format: [User_ID][Assignment_ID] = Score
+    $submissions_lookup = [];
+    foreach ($submissions_raw as $sub) {
+        $submissions_lookup[$sub['FK_User_ID']][$sub['FK_Assignment_ID']] = $sub['Score'];
+    }
+
+    // 1. Calculate matching records tally count for pagination limits
+    $count_sql = "
+        SELECT COUNT(*) FROM Enrollment e
+        INNER JOIN Users u ON e.FK_User_ID = u.User_ID
+        LEFT JOIN CourseGrade cg ON e.Enrollment_ID = cg.FK_Enrollment_ID
+        WHERE e.FK_Course_ID = :course_id AND e.EnrollmentStatus = 'Enrolled'
+    ";
+    if ($search !== '') {
+        $count_sql .= " AND (u.FirstName LIKE :search OR u.LastName LIKE :search OR u.Email LIKE :search)";
+    }
+    if ($remark_filter !== '') {
+        $count_sql .= " AND cg.Remarks = :remark_filter";
+    }
+
+    $count_stmt = $pdo->prepare($count_sql);
+    $count_params = [':course_id' => $course_id];
+    if ($search !== '') { $count_params[':search'] = "%$search%"; }
+    if ($remark_filter !== '') { $count_params[':remark_filter'] = $remark_filter; }
+    $count_stmt->execute($count_params);
+    $total_rows = $count_stmt->fetchColumn();
+    $total_pages = max(1, ceil($total_rows / $limit));
+
+    // 2. Query paginated slice datasets
+    $roster_sql = "
         SELECT 
-            e.Enrollment_ID,
-            u.User_ID,
-            u.FirstName,
-            u.LastName,
-            cg.CourseGrade_id,
-            cg.FinalGrade,
-            cg.Remarks
+            e.Enrollment_ID, u.User_ID, u.FirstName, u.LastName, u.Email,
+            cg.CourseGrade_id, cg.FinalGrade, cg.Remarks
         FROM Enrollment e
         INNER JOIN Users u ON e.FK_User_ID = u.User_ID
         LEFT JOIN CourseGrade cg ON e.Enrollment_ID = cg.FK_Enrollment_ID
         WHERE e.FK_Course_ID = :course_id AND e.EnrollmentStatus = 'Enrolled'
-        ORDER BY u.LastName ASC, u.FirstName ASC
-    ");
-    $students_stmt->execute([':course_id' => $course_id]);
-    $roster = $students_stmt->fetchAll();
-
-    // 4. Fetch all submissions for these students to dynamically inject individual assignment grades
-    $submissions_lookup = [];
-    if (!empty($course_assignments)) {
-        $submissions_stmt = $pdo->prepare("
-            SELECT FK_User_ID, FK_Assignment_ID, Score 
-            FROM AssignmentSubmission
-        ");
-        $submissions_stmt->execute();
-        while ($sub = $submissions_stmt->fetch()) {
-            // Group scores by student ID and assignment ID for quick O(1) lookup speeds
-            $submissions_lookup[$sub['FK_User_ID']][$sub['FK_Assignment_ID']] = $sub['Score'];
-        }
+    ";
+    if ($search !== '') {
+        $roster_sql .= " AND (u.FirstName LIKE :search OR u.LastName LIKE :search OR u.Email LIKE :search)";
     }
+    if ($remark_filter !== '') {
+        $roster_sql .= " AND cg.Remarks = :remark_filter";
+    }
+    $roster_sql .= " ORDER BY u.LastName ASC, u.FirstName ASC LIMIT :limit OFFSET :offset";
+
+    $roster_stmt = $pdo->prepare($roster_sql);
+    $roster_stmt->bindValue(':course_id', $course_id, PDO::PARAM_INT);
+    if ($search !== '') { $roster_stmt->bindValue(':search', "%$search%", PDO::PARAM_STR); }
+    if ($remark_filter !== '') { $roster_stmt->bindValue(':remark_filter', $remark_filter, PDO::PARAM_STR); }
+    $roster_stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+    $roster_stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+    $roster_stmt->execute();
+    $roster = $roster_stmt->fetchAll();
 
 } catch (PDOException $e) {
-    die("Database Error: " . $e->getMessage());
+    die("Database Connection Error: " . $e->getMessage());
 }
-
-$success_msg = ($_GET['success'] ?? '') === 'grade_saved' ? 'Final grade saved successfully.' : null;
-
 $active = 'coursegrades';
 ?>
 <!DOCTYPE html>
@@ -103,43 +138,9 @@ $active = 'coursegrades';
 </head>
 <body class="bg-gradient-to-br from-school-green via-[#125730] to-school-yellow min-h-screen font-serif text-gray-800 flex flex-col md:flex-row">
 
-    <aside class="w-full md:w-64 bg-[#fcfbf7] border-b md:border-b-0 md:border-r border-school-gold/20 flex flex-col justify-between p-6 shrink-0 shadow-xl md:min-h-screen">
-        <div>
-            <div class="flex items-center space-x-3 mb-8 pb-4 border-b border-gray-200">
-                <img src="stiveslogo.png" alt="St. Ives School Logo" class="h-12 w-12 object-contain drop-shadow-sm">
-                <div>
-                    <h2 class="font-bold text-school-green tracking-wide leading-tight">St. Ives School</h2>
-                    <p class="text-xs text-gray-500 italic">Wisdom & Charity</p>
-                </div>
-            </div>
-            <nav class="space-y-2">
-                <a href="prof-homepage.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
-                    <span>🏛️</span><span>Institution Home</span>
-                </a>
-                <a href="prof-courses.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl bg-school-green text-white font-semibold transition shadow-md">
-                    <span>📚</span><span>Courses</span>
-                </a>
+    <?php include 'sidebar.php'; ?>
 
-                <a href="Account-info.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
-                    <span class="text-xl opacity-70 group-hover:opacity-100">👤</span>
-                    <span>Account</span>
-                </a>
-                
-            </nav>
-        </div>
-        <div class="mt-8 pt-4 border-t border-gray-200 flex items-center justify-between">
-            <div class="flex items-center space-x-3">
-                <div class="w-9 h-9 rounded-full bg-school-gold text-white flex items-center justify-center font-bold font-sans text-sm shadow-sm"><?= $initials ?></div>
-                <div>
-                    <h4 class="text-sm font-bold text-school-green leading-tight"><?= $full_name ?></h4>
-                    <p class="text-xs text-gray-500">Professor Account</p>
-                </div>
-            </div>
-            <a href="logout.php" class="text-gray-400 hover:text-red-600 transition p-1 text-lg">🚪</a>
-        </div>
-    </aside>
-
-    <main class="flex-1 p-4 sm:p-8 overflow-y-auto max-w-6xl mx-auto w-full">
+    <main class="ml-0 md:ml-64 flex-1 p-4 sm:p-8 min-h-screen w-full">
         <a href="manage-course.php?course_id=<?= $course_id ?>" class="inline-flex items-center text-sm text-white/90 hover:text-white mb-4 font-sans font-medium">
             ← Back to Manage Course
         </a>
@@ -151,10 +152,35 @@ $active = 'coursegrades';
         <section class="bg-[#fcfbf7] rounded-3xl p-6 shadow-lg border border-school-gold/20 mb-6">
             <p class="text-xs uppercase tracking-wide text-gray-400 font-sans"><?= htmlspecialchars($course['CourseCode']) ?></p>
             <h1 class="text-3xl font-bold text-school-green mt-1">📊 Course Grade Management</h1>
-
         </section>
 
         <?php include 'course-nav.php'; ?>
+        
+        <section class="bg-[#fcfbf7] rounded-2xl p-5 shadow border border-school-gold/20 mb-6 font-sans text-xs">
+            <form method="GET" action="prof-grades.php" class="grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
+                <input type="hidden" name="course_id" value="<?= $course_id ?>">
+                
+                <div>
+                    <label class="block font-bold text-gray-600 mb-1">Search Student Directory:</label>
+                    <input type="text" name="search" value="<?= htmlspecialchars($search) ?>" placeholder="Type name or email lookup..." class="w-full border rounded-xl px-3 py-2 focus:ring-2 focus:ring-school-green focus:outline-none bg-white text-gray-800">
+                </div>
+                
+                <div>
+                    <label class="block font-bold text-gray-600 mb-1">Filter Performance Outcome:</label>
+                    <select name="remark_filter" class="w-full border rounded-xl px-3 py-2 bg-white focus:ring-2 focus:ring-school-green focus:outline-none">
+                        <option value="">All Status Remarks</option>
+                        <option value="Passed" <?= $remark_filter === 'Passed' ? 'selected' : '' ?>>Passed</option>
+                        <option value="Failed" <?= $remark_filter === 'Failed' ? 'selected' : '' ?>>Failed</option>
+                        <option value="Incomplete" <?= $remark_filter === 'Incomplete' ? 'selected' : '' ?>>Incomplete</option>
+                    </select>
+                </div>
+                
+                <div class="pt-4 flex gap-2">
+                    <button type="submit" class="bg-school-green text-white px-4 py-2 rounded-xl font-bold hover:opacity-90 transition">Apply Filters</button>
+                    <a href="prof-grades.php?course_id=<?= $course_id ?>" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-xl text-center flex items-center justify-center hover:bg-gray-300">Clear Reset</a>
+                </div>
+            </form>
+        </section>
 
         <section class="bg-[#fcfbf7] rounded-3xl shadow-lg border border-school-gold/20 overflow-hidden">
             <div class="overflow-x-auto">
@@ -199,7 +225,7 @@ $active = 'coursegrades';
                                                     ?>
                                                     <div class="flex justify-between items-center bg-white border border-gray-100 rounded px-2.5 py-1 hover:border-school-green/30 transition group">
                                                         <a href="grade-submissions.php?assignment_id=<?= $asg_id ?>#user-<?= $student['User_ID'] ?>" 
-                                                        class="text-gray-600 font-medium truncate max-w-[280px] hover:text-school-green underline decoration-transparent hover:decoration-school-green transition duration-150">
+                                                           class="text-gray-600 font-medium truncate max-w-[280px] hover:text-school-green underline decoration-transparent hover:decoration-school-green transition duration-150">
                                                             📝 <?= htmlspecialchars($asg['Title']) ?>
                                                         </a>
                                                         <span class="font-mono">
@@ -263,6 +289,21 @@ $active = 'coursegrades';
                         <?php endif; ?>
                     </tbody>
                 </table>
+                
+                <div class="p-4 bg-gray-50 border-t flex flex-col sm:flex-row justify-between items-center gap-3 font-sans text-xs border-t border-gray-100">
+                    <p class="text-gray-500">Showing rows <?= min($total_rows, $offset + 1) ?> to <?= min($total_rows, $offset + $limit) ?> of <?= $total_rows ?> entries</p>
+                    <div class="flex items-center gap-2">
+                        <?php if ($page > 1): ?>
+                            <a href="?course_id=<?= $course_id ?>&page=<?= $page - 1 ?>&search=<?= urlencode($search) ?>&remark_filter=<?= urlencode($remark_filter) ?>" class="px-3 py-1.5 rounded-lg bg-gray-200 hover:bg-gray-300">← Prev</a>
+                        <?php endif; ?>
+                        
+                        <span class="font-semibold text-gray-600">Page <?= $page ?> of <?= $total_pages ?></span>
+                        
+                        <?php if ($page < $total_pages): ?>
+                            <a href="?course_id=<?= $course_id ?>&page=<?= $page + 1 ?>&search=<?= urlencode($search) ?>&remark_filter=<?= urlencode($remark_filter) ?>" class="px-3 py-1.5 rounded-lg bg-gray-200 hover:bg-gray-300">Next →</a>
+                        <?php endif; ?>
+                    </div>
+                </div>
             </div>
         </section>
     </main>

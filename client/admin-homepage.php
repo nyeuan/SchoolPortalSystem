@@ -87,16 +87,29 @@ try {
         FROM Announcements a
         INNER JOIN Courses c ON a.FK_Course_ID = c.Course_ID
         ORDER BY a.PostDate DESC 
-        LIMIT 4
+        LIMIT 40
     ");
     $ann_stmt->execute();
-    $recent_announcements = $ann_stmt->fetchAll();
+    $all_announcements = $ann_stmt->fetchAll();
+
+    // Split logs conditionally based on course scope
+    $admin_announcements = [];
+    $broadcast_announcements = [];
+
+    foreach ($all_announcements as $ann) {
+        if ($ann['CourseCode'] === 'ADMIN') {
+            $admin_announcements[] = $ann;
+        } else {
+            $broadcast_announcements[] = $ann;
+        }
+    }
 
 } catch (PDOException $e) {
     $total_students = 0;
     $total_professors = 0;
     $total_courses = 0;
-    $recent_announcements = [];
+    $admin_announcements = [];
+    $broadcast_announcements = [];
 }
 ?>
 <!DOCTYPE html>
@@ -122,11 +135,27 @@ try {
                 }
             }
         }
+        
+        // Reusable Toggle Logic for both sets of logs
+        function toggleLogs(containerId, buttonId) {
+            const hiddenContainer = document.getElementById(containerId);
+            const toggleBtn = document.getElementById(buttonId);
+            
+            if (hiddenContainer && toggleBtn) {
+                if (hiddenContainer.classList.contains('hidden')) {
+                    hiddenContainer.classList.remove('hidden');
+                    toggleBtn.innerHTML = 'Show Less Logs ▴';
+                } else {
+                    hiddenContainer.classList.add('hidden');
+                    toggleBtn.innerHTML = 'Show More Logs ▾';
+                }
+            }
+        }
     </script>
 </head>
-<body class="bg-gradient-to-br from-school-green via-[#125730] to-school-yellow min-h-screen font-serif text-gray-800 flex flex-col md:flex-row">
+<body class="bg-gradient-to-br from-school-green via-[#125730] to-school-yellow min-h-screen">
 
-    <aside class="w-full md:w-64 bg-[#fcfbf7] border-b md:border-b-0 md:border-r border-school-gold/20 flex flex-col justify-between p-6 shrink-0 shadow-xl md:min-h-screen">
+    <aside class="fixed top-0 left-0 h-screen w-64 bg-[#fcfbf7] border-r border-school-gold/20 flex flex-col justify-between p-6 shadow-xl z-50">
         <div>
             <div class="flex items-center space-x-3 mb-8 pb-4 border-b border-gray-200">
                 <img src="stiveslogo.png" alt="St. Ives School Logo" class="h-12 w-12 object-contain drop-shadow-sm">
@@ -168,7 +197,7 @@ try {
         </div>
     </aside>
 
-    <main class="flex-1 p-4 sm:p-8 overflow-y-auto max-w-7xl mx-auto w-full">
+    <main class="ml-64 h-screen overflow-y-auto p-8">
         
         <?php if ($success_msg): ?>
             <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl px-5 py-3 mb-4 text-sm font-sans shadow-sm">
@@ -199,15 +228,24 @@ try {
                 <section class="bg-[#fcfbf7] rounded-2xl p-6 shadow-lg border border-school-gold/20">
                     <h3 class="text-xl font-bold text-school-green border-b border-gray-100 pb-3 mb-4">📢 System Broadcast Logs</h3>
                     
-                    <?php if (empty($recent_announcements)): ?>
-                        <p class="text-sm text-gray-400 italic">No historical announcements distributed yet.</p>
+                    <?php if (empty($broadcast_announcements)): ?>
+                        <p class="text-sm text-gray-400 italic">No historical course announcements distributed yet.</p>
                     <?php else: ?>
                         <div class="space-y-4 font-sans">
-                            <?php foreach ($recent_announcements as $announcement): ?>
-                                <?php $isAdminAnn = ($announcement['CourseCode'] === 'ADMIN'); ?>
-                                <div class="p-3 rounded-xl border relative <?= $isAdminAnn ? 'bg-amber-50/60 border-amber-200' : 'bg-gray-50 border-gray-200/60' ?>">
-                                    <span class="absolute top-3 right-3 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded <?= $isAdminAnn ? 'bg-red-600 text-white' : 'bg-school-gold/10 text-school-gold' ?>">
-                                        <?= $isAdminAnn ? '🚨 Admin Global' : htmlspecialchars($announcement['CourseCode']) ?>
+                            <?php 
+                            $bcIndex = 0; 
+                            $hasBroadcastDropdown = count($broadcast_announcements) > 3;
+                            $isOpenBcDiv = false;
+                            
+                            foreach ($broadcast_announcements as $announcement): 
+                                if ($bcIndex === 3): 
+                                    $isOpenBcDiv = true; ?>
+                                    <div id="extendedBroadcastLogs" class="hidden space-y-4 pt-4 border-t border-dashed border-gray-200">
+                                <?php endif; ?>
+
+                                <div class="p-3 rounded-xl border bg-gray-50 border-gray-200/60 relative">
+                                    <span class="absolute top-3 right-3 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-school-gold/10 text-school-gold">
+                                        <?= htmlspecialchars($announcement['CourseCode']) ?>
                                     </span>
                                     <h4 class="font-bold text-school-green text-sm pr-24"><?= htmlspecialchars($announcement['Title']) ?></h4>
                                     <p class="text-xs text-gray-600 mt-1"><?= htmlspecialchars($announcement['Message']) ?></p>
@@ -215,7 +253,22 @@ try {
                                         📅 <?= date('M d, Y @ h:i A', strtotime($announcement['PostDate'])) ?>
                                     </span>
                                 </div>
-                            <?php endforeach; ?>
+
+                            <?php 
+                                $bcIndex++;
+                            endforeach; 
+
+                            if ($isOpenBcDiv): ?>
+                                </div>
+                            <?php endif; ?>
+
+                            <?php if ($hasBroadcastDropdown): ?>
+                                <div class="text-center pt-2">
+                                    <button id="broadcastToggleBtn" onclick="toggleLogs('extendedBroadcastLogs', 'broadcastToggleBtn')" class="text-xs text-school-green font-bold bg-school-green/5 border border-school-green/10 hover:bg-school-green/10 transition px-4 py-2 rounded-xl inline-flex items-center gap-1">
+                                        Show More Logs ▾
+                                    </button>
+                                </div>
+                            <?php endif; ?>
                         </div>
                     <?php endif; ?>
                 </section>
@@ -248,12 +301,54 @@ try {
             <div class="space-y-6">
                 <section class="bg-[#fcfbf7] rounded-2xl p-6 shadow-lg border border-school-gold/20">
                     <h3 class="text-lg font-bold text-school-green border-b border-gray-100 pb-2 mb-3">⚡ Admin Announcement Logs</h3>
-                    <div class="grid grid-cols-1 gap-2.5 font-sans">
-                        
-                        <button onclick="document.getElementById('broadcastModal').classList.remove('hidden')"
-                                class="w-full text-center p-3 bg-red-700 text-white rounded-xl hover:bg-red-800 transition text-sm font-semibold shadow-sm mb-2 animate-pulse">
-                            🚨 Broadcast Admin Card
-                        </button>
+                    
+                    <button onclick="document.getElementById('broadcastModal').classList.remove('hidden')"
+                            class="w-full text-center p-3 bg-red-700 text-white rounded-xl hover:bg-red-800 transition text-sm font-semibold shadow-sm mb-4 animate-pulse">
+                        🚨 Broadcast Admin Card
+                    </button>
+
+                    <div class="space-y-3 font-sans mb-4">
+                        <?php if (empty($admin_announcements)): ?>
+                            <p class="text-xs text-gray-400 italic">No historical admin announcements found.</p>
+                        <?php else: ?>
+                            <?php 
+                            $admIndex = 0;
+                            $hasAdminDropdown = count($admin_announcements) > 3;
+                            $isOpenAdmDiv = false;
+                            
+                            foreach ($admin_announcements as $announcement): 
+                                if ($admIndex === 3): 
+                                    $isOpenAdmDiv = true; ?>
+                                    <div id="extendedAdminLogs" class="hidden space-y-3 pt-2 border-t border-dashed border-gray-200">
+                                <?php endif; ?>
+
+                                <div class="p-3 rounded-xl border bg-amber-50/60 border-amber-200 relative text-xs">
+                                    <span class="absolute top-2.5 right-2.5 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-red-600 text-white">
+                                        🚨 Admin
+                                    </span>
+                                    <h4 class="font-bold text-school-green pr-14"><?= htmlspecialchars($announcement['Title']) ?></h4>
+                                    <p class="text-gray-600 mt-1 leading-relaxed"><?= htmlspecialchars($announcement['Message']) ?></p>
+                                    <span class="text-[9px] text-gray-400 block mt-1.5">
+                                        📅 <?= date('M d, Y @ h:i A', strtotime($announcement['PostDate'])) ?>
+                                    </span>
+                                </div>
+
+                            <?php 
+                                $admIndex++;
+                            endforeach; 
+
+                            if ($isOpenAdmDiv): ?>
+                                </div> 
+                            <?php endif; ?>
+
+                            <?php if ($hasAdminDropdown): ?>
+                                <div class="text-center pt-2">
+                                    <button id="adminToggleBtn" onclick="toggleLogs('extendedAdminLogs', 'adminToggleBtn')" class="text-[11px] text-school-green font-bold bg-school-green/5 border border-school-green/10 hover:bg-school-green/10 transition px-3 py-1.5 rounded-lg inline-flex items-center gap-1">
+                                        Show More Logs ▾
+                                    </button>
+                                </div>
+                            <?php endif; ?>
+                        <?php endif; ?>
                     </div>
                 </section>
 
