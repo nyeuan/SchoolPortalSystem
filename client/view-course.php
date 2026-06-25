@@ -1,51 +1,57 @@
 <?php
 $required_role = 'Student';
-include 'session_check.php';
-include 'db.php';
+include 'session_check.php'; //
+include 'db.php'; //
 
-$first_name = htmlspecialchars($_SESSION['first_name']);
-$last_name  = htmlspecialchars($_SESSION['last_name']);
-$initials   = strtoupper(substr($first_name, 0, 1) . substr($last_name, 0, 1));
-$full_name  = $first_name . ' ' . $last_name;
-$student_id = $_SESSION['user_id'];
+$first_name = htmlspecialchars($_SESSION['first_name']); //
+$last_name  = htmlspecialchars($_SESSION['last_name']); //
+$initials   = strtoupper(substr($first_name, 0, 1) . substr($last_name, 0, 1)); //
+$full_name  = $first_name . ' ' . $last_name; //
+$student_id = $_SESSION['user_id']; //
 
-$course_id = filter_input(INPUT_GET, 'course_id', FILTER_VALIDATE_INT);
+$course_id = filter_input(INPUT_GET, 'course_id', FILTER_VALIDATE_INT); //
 
 if (!$course_id) {
-    header('Location: courses.php');
+    header('Location: courses.php'); //
     exit;
 }
 
 try {
-    // Confirm the student is actually enrolled in this course before showing anything
+    // Confirm the student is enrolled AND the course belongs to their active assigned Section
     $enroll_stmt = $pdo->prepare("
-        SELECT Enrollment_ID
-        FROM Enrollment
-        WHERE FK_Course_ID = :course_id AND FK_User_ID = :student_id
+        SELECT e.Enrollment_ID
+        FROM Enrollment e
+        INNER JOIN Users u ON e.FK_User_ID = u.User_ID
+        INNER JOIN SectionCourses sc ON e.FK_Course_ID = sc.FK_Course_ID AND u.FK_Section_ID = sc.FK_Section_ID
+        WHERE e.FK_Course_ID = :course_id AND e.FK_User_ID = :student_id AND e.EnrollmentStatus = 'Enrolled'
     ");
     $enroll_stmt->execute([
         ':course_id'  => $course_id,
         ':student_id' => $student_id,
     ]);
     if (!$enroll_stmt->fetch()) {
-        header('Location: courses.php?error=not_enrolled');
+        header('Location: courses.php?error=not_enrolled'); //
         exit;
     }
 
-    // Course header info, plus instructor name
+    // FIXED: Joined GradeLevel to extract the detailed structural tier tracking labels
     $course_stmt = $pdo->prepare("
-        SELECT c.Course_ID, c.CourseCode, c.CourseName, c.Status,
+        SELECT c.Course_ID, c.CourseCode, c.CourseName, c.Status, sec.SectionName, gl.GradeName,
                CONCAT(u.FirstName, ' ', u.LastName) AS InstructorName
         FROM Courses c
-        LEFT JOIN CourseInstructors ci ON c.Course_ID = ci.FK_Course_ID
-        LEFT JOIN Users u ON ci.FK_User_ID = u.User_ID
+        INNER JOIN SectionCourses sc ON c.Course_ID = sc.FK_Course_ID
+        INNER JOIN Users stu ON stu.User_ID = :student_id AND stu.FK_Section_ID = sc.FK_Section_ID
+        LEFT  JOIN Section sec ON sc.FK_Section_ID = sec.Section_ID
+        LEFT  JOIN GradeLevel gl ON sec.FK_GradeLevel_ID = gl.GradeLevel_ID
+        LEFT  JOIN CourseInstructors ci ON c.Course_ID = ci.FK_Course_ID
+        LEFT  JOIN Users u ON ci.FK_User_ID = u.User_ID
         WHERE c.Course_ID = :course_id
     ");
-    $course_stmt->execute([':course_id' => $course_id]);
+    $course_stmt->execute([':course_id' => $course_id, ':student_id' => $student_id]);
     $course = $course_stmt->fetch();
 
     if (!$course) {
-        header('Location: courses.php?error=course_not_found');
+        header('Location: courses.php?error=course_not_found'); //
         exit;
     }
 
@@ -55,27 +61,27 @@ try {
         FROM CourseModule
         WHERE FK_Course_ID = :course_id
         ORDER BY ModuleSequence ASC
-    ");
-    $modules_stmt->execute([':course_id' => $course_id]);
-    $modules = $modules_stmt->fetchAll();
+    "); //
+    $modules_stmt->execute([':course_id' => $course_id]); //
+    $modules = $modules_stmt->fetchAll(); //
 
-    $materials_by_module   = [];
-    $assignments_by_module = [];
-    $submissions_by_assignment = [];
+    $materials_by_module   = []; //
+    $assignments_by_module = []; //
+    $submissions_by_assignment = []; //
 
     if (!empty($modules)) {
-        $module_ids = array_column($modules, 'CourseModule_ID');
-        $placeholders = implode(',', array_fill(0, count($module_ids), '?'));
+        $module_ids = array_column($modules, 'CourseModule_ID'); //
+        $placeholders = implode(',', array_fill(0, count($module_ids), '?')); //
 
         $materials_stmt = $pdo->prepare("
             SELECT Material_ID, MaterialName, FileName, FilePath, FileType, UploadDate, FK_CourseModule_ID
             FROM LearningMaterial
             WHERE FK_CourseModule_ID IN ($placeholders)
             ORDER BY UploadDate DESC
-        ");
-        $materials_stmt->execute($module_ids);
+        "); //
+        $materials_stmt->execute($module_ids); //
         foreach ($materials_stmt->fetchAll() as $material) {
-            $materials_by_module[$material['FK_CourseModule_ID']][] = $material;
+            $materials_by_module[$material['FK_CourseModule_ID']][] = $material; //
         }
 
         $assignments_stmt = $pdo->prepare("
@@ -83,56 +89,52 @@ try {
             FROM Assignments
             WHERE FK_CourseModule_ID IN ($placeholders)
             ORDER BY DueDate ASC
-        ");
-        $assignments_stmt->execute($module_ids);
-        $all_assignments = $assignments_stmt->fetchAll();
+        "); //
+        $assignments_stmt->execute($module_ids); //
+        $all_assignments = $assignments_stmt->fetchAll(); //
         foreach ($all_assignments as $assignment) {
-            $assignments_by_module[$assignment['FK_CourseModule_ID']][] = $assignment;
+            $assignments_by_module[$assignment['FK_CourseModule_ID']][] = $assignment; //
         }
 
-        // Pull this student's own submissions for every assignment in this course,
-        // so we know whether to show "Submitted" or the submission form.
         if (!empty($all_assignments)) {
-            $assignment_ids = array_column($all_assignments, 'Assignment_ID');
-            $a_placeholders = implode(',', array_fill(0, count($assignment_ids), '?'));
+            $assignment_ids = array_column($all_assignments, 'Assignment_ID'); //
+            $a_placeholders = implode(',', array_fill(0, count($assignment_ids), '?')); //
 
-            $sub_params = $assignment_ids;
-            $sub_params[] = $student_id;
+            $sub_params = $assignment_ids; //
+            $sub_params[] = $student_id; //
 
             $sub_stmt = $pdo->prepare("
                 SELECT AssignmentSubmission_ID, Filepath, Filename, SubmissionDate, Score, Feedback, FK_Assignment_ID
                 FROM AssignmentSubmission
                 WHERE FK_Assignment_ID IN ($a_placeholders) AND FK_User_ID = ?
                 ORDER BY SubmissionDate DESC
-            ");
-            $sub_stmt->execute($sub_params);
+            "); //
+            $sub_stmt->execute($sub_params); //
             foreach ($sub_stmt->fetchAll() as $submission) {
-                // Keep only the most recent submission per assignment (first one seen, since ordered DESC)
                 if (!isset($submissions_by_assignment[$submission['FK_Assignment_ID']])) {
-                    $submissions_by_assignment[$submission['FK_Assignment_ID']] = $submission;
+                    $submissions_by_assignment[$submission['FK_Assignment_ID']] = $submission; //
                 }
             }
         }
     }
 
 } catch (PDOException $e) {
-    die("Database Error: " . $e->getMessage());
+    die("Database Error: " . $e->getMessage()); //
 }
 
-// Simple banners driven by redirect query params from submit-assignment.php
 $success_messages = [
-    'submission_added' => 'Assignment submitted successfully.',
+    'submission_added' => 'Assignment submitted successfully.', //
 ];
 $error_messages = [
-    'missing_fields'    => 'Please choose a file to submit.',
-    'upload_failed'     => 'The file upload failed. Please try again.',
-    'invalid_file_type' => 'That file type is not allowed.',
-    'not_enrolled'      => 'You are not enrolled in that course.',
+    'missing_fields'    => 'Please choose a file to submit.', //
+    'upload_failed'     => 'The file upload failed. Please try again.', //
+    'invalid_file_type' => 'That file type is not allowed.', //
+    'not_enrolled'      => 'You are not enrolled in that course.', //
 ];
-$success_msg = $success_messages[$_GET['success'] ?? ''] ?? null;
-$error_msg   = $error_messages[$_GET['error'] ?? ''] ?? null;
+$success_msg = $success_messages[$_GET['success'] ?? ''] ?? null; //
+$error_msg   = $error_messages[$_GET['error'] ?? ''] ?? null; //
 
-$active = 'content';
+$active = 'content'; //
 ?>
 
 <!DOCTYPE html>
@@ -141,9 +143,7 @@ $active = 'content';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>St. Ives School - <?= htmlspecialchars($course['CourseCode']) ?></title>
-
     <script src="https://cdn.tailwindcss.com"></script>
-
     <script>
         tailwind.config = {
             theme: {
@@ -164,13 +164,9 @@ $active = 'content';
 </head>
 
 <body class="bg-gradient-to-br from-school-green via-[#125730] to-school-yellow min-h-screen font-serif text-gray-800 flex flex-col md:flex-row">
-
-    <!-- sidebar -->
     <?php include 'sidebar.php'; ?>
 
-    <!-- main content -->
     <main class="ml-0 md:ml-64 flex-1 p-4 sm:p-8 min-h-screen w-full">
-
         <a href="courses.php" class="inline-flex items-center text-sm text-white/90 hover:text-white mb-4 font-sans font-medium">
             ← Back to Courses
         </a>
@@ -187,74 +183,56 @@ $active = 'content';
             </div>
         <?php endif; ?>
 
-        <!-- course header -->
         <section class="bg-[#fcfbf7] rounded-3xl p-6 shadow-lg border border-school-gold/20 mb-6">
-
-            <h1 class="text-4xl font-bold text-school-green">
-                <?= htmlspecialchars($course['CourseCode']) ?> — <?= htmlspecialchars($course['CourseName']) ?>
+            <h1 class="text-4xl font-bold text-school-green flex items-center flex-wrap gap-2">
+                <span><?= htmlspecialchars($course['CourseCode']) ?> — <?= htmlspecialchars($course['CourseName']) ?></span>
+                <?php if (!empty($course['SectionName'])): ?>
+                    <span class="text-xs bg-school-gold text-white px-2.5 py-1 rounded-full font-sans font-bold uppercase tracking-wider shadow-sm">
+                        <?= htmlspecialchars($course['GradeName'] ?? 'Academic') ?> — <?= htmlspecialchars($course['SectionName']) ?>
+                    </span>
+                <?php endif; ?>
             </h1>
-
             <p class="text-gray-500 italic mt-2">
                 🧑‍🏫 <?= htmlspecialchars($course['InstructorName'] ?? 'No Instructor Assigned') ?>
             </p>
-
         </section>
 
         <?php include 'course-nav.php'; ?>
 
-        <!-- modules -->
         <?php if (empty($modules)): ?>
-
             <div class="bg-[#fcfbf7] rounded-3xl p-10 text-center shadow-lg border border-school-gold/20 mb-6">
                 <p class="text-gray-500 italic">No modules have been published for this course yet.</p>
             </div>
-
         <?php else: ?>
-
             <?php foreach ($modules as $index => $module): ?>
                 <?php
                     $mod_id = $module['CourseModule_ID'];
                     $mod_materials   = $materials_by_module[$mod_id] ?? [];
                     $mod_assignments = $assignments_by_module[$mod_id] ?? [];
                 ?>
-
                 <details <?= $index === 0 ? 'open' : '' ?> class="bg-[#fcfbf7] rounded-3xl shadow-lg border border-school-gold/20 mb-6">
-
                     <summary class="list-none cursor-pointer">
-
                         <div class="p-6 flex justify-between items-center">
-
                             <h2 class="text-2xl font-bold text-school-green">
                                 📁 <?= htmlspecialchars($module['ModuleName']) ?>
                             </h2>
-
                             <div class="space-x-3">
                                 <span class="text-xs text-gray-400 font-sans">Sequence <?= (int)$module['ModuleSequence'] ?></span>
                             </div>
-
                         </div>
-
                     </summary>
 
                     <div class="px-6 pb-6">
-
-                        <!-- Learning Materials -->
                         <div class="bg-gray-50 rounded-2xl border p-5 mb-4">
-
                             <h3 class="text-xl font-bold text-school-green mb-4">
                                 📚 Learning Materials
                             </h3>
-
                             <?php if (empty($mod_materials)): ?>
-
                                 <p class="text-sm text-gray-400 italic font-sans">No learning materials have been posted for this module yet.</p>
-
                             <?php else: ?>
-
                                 <div class="space-y-2">
                                     <?php foreach ($mod_materials as $material): ?>
                                         <div class="flex justify-between items-center border rounded-xl p-4 bg-white">
-
                                             <div class="font-sans">
                                                 <a href="<?= htmlspecialchars($material['FilePath']) ?>" target="_blank"
                                                    class="font-semibold text-school-green hover:underline">
@@ -264,34 +242,24 @@ $active = 'content';
                                                     <?= htmlspecialchars(strtoupper($material['FileType'])) ?> · Posted <?= date('M d, Y', strtotime($material['UploadDate'])) ?>
                                                 </p>
                                             </div>
-
                                             <div>
                                                 <a href="<?= htmlspecialchars($material['FilePath']) ?>" target="_blank" class="text-blue-600 font-semibold mr-4 font-sans text-sm">
                                                     View
                                                 </a>
                                             </div>
-
                                         </div>
                                     <?php endforeach; ?>
                                 </div>
-
                             <?php endif; ?>
-
                         </div>
 
-                        <!-- assignments -->
                         <div class="bg-gray-50 rounded-2xl border p-5">
-
                             <h3 class="text-xl font-bold text-school-green mb-4">
                                 📝 Assignments
                             </h3>
-
                             <?php if (empty($mod_assignments)): ?>
-
                                 <p class="text-sm text-gray-400 italic font-sans">No assignments have been posted for this module yet.</p>
-
                             <?php else: ?>
-
                                 <div class="space-y-3">
                                     <?php foreach ($mod_assignments as $assignment): ?>
                                         <?php
@@ -300,9 +268,7 @@ $active = 'content';
                                             $is_past_due = strtotime($assignment['DueDate']) < time();
                                         ?>
                                         <div class="border rounded-xl p-4 bg-white">
-
                                             <div class="flex justify-between items-start gap-4 font-sans">
-
                                                 <div class="min-w-0">
                                                     <p class="font-semibold text-school-green">
                                                         📝 <?= htmlspecialchars($assignment['Title']) ?>
@@ -335,14 +301,10 @@ $active = 'content';
                                                         </span>
                                                     <?php endif; ?>
                                                 </div>
-
                                             </div>
 
-                                            <!-- Submission area -->
                                             <div class="border-t mt-3 pt-3 font-sans">
-
                                                 <?php if ($existing_submission): ?>
-
                                                     <div class="flex flex-wrap items-center justify-between gap-2">
                                                         <p class="text-xs text-gray-500">
                                                             Submitted <?= date('M d, Y @ h:i A', strtotime($existing_submission['SubmissionDate'])) ?>
@@ -351,7 +313,6 @@ $active = 'content';
                                                                 📎 <?= htmlspecialchars($existing_submission['Filename']) ?>
                                                             </a>
                                                         </p>
-
                                                         <?php if (!$is_past_due): ?>
                                                             <a href="submit-assignment.php?assignment_id=<?= $a_id ?>&course_id=<?= $course_id ?>"
                                                                 target="_blank" rel="noopener"
@@ -360,45 +321,24 @@ $active = 'content';
                                                             </a>
                                                         <?php endif; ?>
                                                     </div>
-
                                                 <?php elseif ($is_past_due): ?>
-
                                                     <p class="text-xs text-gray-400 italic">The deadline for this assignment has passed.</p>
-
                                                 <?php else: ?>
-
                                                     <a href="submit-assignment.php?assignment_id=<?= $a_id ?>&course_id=<?= $course_id ?>"
-                                                       
                                                         class="inline-block bg-school-green text-white px-4 py-2 rounded-xl text-xs font-semibold hover:bg-school-green-hover transition">
                                                         Submit Assignment ↗
                                                     </a>
-
                                                 <?php endif; ?>
-
                                             </div>
-
                                         </div>
                                     <?php endforeach; ?>
                                 </div>
-
                             <?php endif; ?>
-
                         </div>
-
                     </div>
-
                 </details>
-
             <?php endforeach; ?>
-
         <?php endif; ?>
-
     </main>
-
-    <script>
-        // Submission now happens on a dedicated page (submit-assignment.php),
-        // opened in a new tab from the "Submit Assignment" / "Replace Submission" links above.
-    </script>
-
 </body>
 </html>

@@ -1,51 +1,52 @@
 <?php
 $required_role = 'Professor';
-include 'session_check.php';
-include 'db.php';
+include 'session_check.php'; //
+include 'db.php'; //
 
-$first_name = htmlspecialchars($_SESSION['first_name']);
-$last_name  = htmlspecialchars($_SESSION['last_name']);
-$initials   = strtoupper(substr($first_name, 0, 1) . substr($last_name, 0, 1));
-$full_name  = $first_name . ' ' . $last_name;
-$prof_id    = $_SESSION['user_id'];
+$first_name = htmlspecialchars($_SESSION['first_name']); //
+$last_name  = htmlspecialchars($_SESSION['last_name']); //
+$initials   = strtoupper(substr($first_name, 0, 1) . substr($last_name, 0, 1)); //
+$full_name  = $first_name . ' ' . $last_name; //
+$prof_id    = $_SESSION['user_id']; //
 
 // ── Filter inputs ──────────────────────────────────────────
-$filter_term   = isset($_GET['term'])   ? (int)$_GET['term']   : 0;
-$filter_status = isset($_GET['status']) ? trim($_GET['status']) : '';
+$filter_term   = isset($_GET['term'])   ? (int)$_GET['term']   : 0; //
+$filter_status = isset($_GET['status']) ? trim($_GET['status']) : ''; //
 
 // ── Terms dropdown ─────────────────────────────────────────
 try {
-    $terms = $pdo->query("SELECT Term_ID, TermName FROM Term ORDER BY StartDate DESC")->fetchAll();
-} catch (PDOException $e) { $terms = []; }
+    $terms = $pdo->query("SELECT Term_ID, TermName FROM Term ORDER BY StartDate DESC")->fetchAll(); //
+} catch (PDOException $e) { $terms = []; } //
 
 // ── Build WHERE clause ─────────────────────────────────────
-// For professors, Term filtering means: at least one student enrolled
-// in that term in this course — we join Enrollment for that.
-$where_parts = ["ci.FK_User_ID = :prof_id"];
-$params      = [':prof_id' => $prof_id];
+$where_parts = ["ci.FK_User_ID = :prof_id"]; //
+$params      = [':prof_id' => $prof_id]; //
 
 if ($filter_term > 0) {
-    // Sub-select: courses that have any enrollment in the chosen term
     $where_parts[] = "c.Course_ID IN (
         SELECT e2.FK_Course_ID FROM Enrollment e2
         WHERE e2.FK_Term_ID = :term_id
-    )";
-    $params[':term_id'] = $filter_term;
+    )"; //
+    $params[':term_id'] = $filter_term; //
 }
 if ($filter_status !== '') {
-    $where_parts[] = "c.Status = :status";
-    $params[':status'] = $filter_status;
+    $where_parts[] = "c.Status = :status"; //
+    $params[':status'] = $filter_status; //
 }
 
-$where_sql = implode(' AND ', $where_parts);
+$where_sql = implode(' AND ', $where_parts); //
 
 try {
+    // FIXED: Extended join queries to match GradeLevel properties safely
     $stmt = $pdo->prepare("
-        SELECT DISTINCT c.Course_ID, c.CourseCode, c.CourseName, c.Status
+        SELECT DISTINCT c.Course_ID, c.CourseCode, c.CourseName, c.Status, sec.SectionName, gl.GradeName
         FROM Courses c
         INNER JOIN CourseInstructors ci ON c.Course_ID = ci.FK_Course_ID
+        LEFT  JOIN SectionCourses sc    ON c.Course_ID = sc.FK_Course_ID
+        LEFT  JOIN Section sec          ON sc.FK_Section_ID = sec.Section_ID
+        LEFT  JOIN GradeLevel gl        ON sec.FK_GradeLevel_ID = gl.GradeLevel_ID
         WHERE $where_sql
-        ORDER BY c.CourseCode ASC
+        ORDER BY c.CourseCode ASC, sec.SectionName ASC
     ");
     $stmt->execute($params);
     $assigned_courses = $stmt->fetchAll();
@@ -57,12 +58,12 @@ try {
         INNER JOIN CourseInstructors ci ON c.Course_ID = ci.FK_Course_ID
         WHERE ci.FK_User_ID = :pid
         ORDER BY c.Status ASC
-    ");
-    $sstmt->execute([':pid' => $prof_id]);
-    $all_statuses = $sstmt->fetchAll(PDO::FETCH_COLUMN);
+    "); //
+    $sstmt->execute([':pid' => $prof_id]); //
+    $all_statuses = $sstmt->fetchAll(PDO::FETCH_COLUMN); //
 
 } catch (PDOException $e) {
-    die("Database Connection Error: " . $e->getMessage());
+    die("Database Connection Error: " . $e->getMessage()); //
 }
 ?>
 <!DOCTYPE html>
@@ -92,19 +93,16 @@ try {
 </head>
 
 <body class="bg-gradient-to-br from-school-green via-[#125730] to-school-yellow min-h-screen font-serif text-gray-800 flex flex-col md:flex-row">
-
     <?php include 'sidebar.php'; ?>
 
     <main class="ml-0 md:ml-64 flex-1 p-4 sm:p-8 min-h-screen w-full">
 
         <section class="bg-[#fcfbf7] rounded-2xl p-6 shadow-lg border border-school-gold/20 mb-6">
-            <h1 class="text-3xl font-bold tracking-wide text-school-green">Courses</h1>
+            <h1 class="text-3xl font-bold tracking-wide text-school-green">Assigned Courses</h1>
         </section>
 
-        <!-- ── Search & Filter bar ─────────────────────────── -->
         <section class="bg-[#fcfbf7] rounded-2xl p-5 shadow-lg border border-school-gold/20 mb-6">
             <form method="GET" action="prof-courses.php" class="grid grid-cols-1 lg:grid-cols-4 gap-4">
-
                 <input
                     type="text"
                     id="searchInput"
@@ -130,11 +128,9 @@ try {
                         </option>
                     <?php endforeach; ?>
                 </select>
-
             </form>
         </section>
 
-        <!-- ── Course grid ──────────────────────────────────── -->
         <section>
             <div id="courseGrid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
                 <?php if (empty($assigned_courses)): ?>
@@ -143,17 +139,22 @@ try {
                     </div>
                 <?php else: ?>
                     <?php foreach ($assigned_courses as $course): ?>
-                        <div data-search="<?= strtolower(htmlspecialchars($course['CourseCode'] . ' ' . $course['CourseName'])) ?>"
+                        <div data-search="<?= strtolower(htmlspecialchars($course['CourseCode'] . ' ' . $course['CourseName'] . ' ' . ($course['GradeName'] ?? '') . ' ' . ($course['SectionName'] ?? ''))) ?>"
                              class="course-card bg-[#fcfbf7] rounded-2xl shadow-lg border border-school-gold/20 overflow-hidden hover:shadow-xl transition flex flex-col justify-between">
                             <div>
-                                <div class="w-full h-32 bg-school-green/10 flex items-center justify-center text-school-green font-bold text-lg tracking-wider border-b border-school-gold/10 font-sans">
-                                    <?= htmlspecialchars($course['CourseCode']) ?>
+                                <div class="w-full h-32 bg-school-green/10 flex flex-col items-center justify-center text-school-green border-b border-school-gold/10 font-sans px-4 text-center">
+                                    <span class="font-bold text-lg tracking-wider"><?= htmlspecialchars($course['CourseCode']) ?></span>
+                                    <?php if (!empty($course['SectionName'])): ?>
+                                        <span class="text-[11px] bg-school-green text-white px-2.5 py-0.5 rounded-md mt-2 font-semibold shadow-sm">
+                                            <?= htmlspecialchars($course['GradeName'] ?? 'Academic') ?> — <?= htmlspecialchars($course['SectionName']) ?>
+                                        </span>
+                                    <?php endif; ?>
                                 </div>
                                 <div class="p-4">
                                     <p class="text-xs uppercase tracking-wide text-gray-400 font-sans">Code: <?= htmlspecialchars($course['CourseCode']) ?></p>
                                     <h3 class="text-md font-bold text-school-green mt-1 line-clamp-2 h-12"><?= htmlspecialchars($course['CourseName']) ?></h3>
                                     <p class="text-gray-600 mt-2 text-xs font-sans">
-                                        Enrollment Status:
+                                        Status:
                                         <span class="font-semibold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded border border-emerald-200">
                                             <?= htmlspecialchars($course['Status']) ?>
                                         </span>
@@ -184,7 +185,6 @@ try {
                 <p class="text-gray-500 italic font-sans">No courses match your search.</p>
             </div>
         </section>
-
     </main>
 
     <script>
@@ -195,7 +195,6 @@ try {
         let currentPage   = 1;
         let filteredCards = [...allCards];
 
-        // ── Pagination container ───────────────────────────
         const paginationEl = document.createElement('div');
         paginationEl.id = 'pagination';
         paginationEl.className = 'flex items-center justify-center gap-2 mt-6 flex-wrap';
@@ -211,14 +210,11 @@ try {
             const start = (currentPage - 1) * PER_PAGE;
             const end   = start + PER_PAGE;
 
-            // Show/hide cards
             allCards.forEach(card => card.style.display = 'none');
             filteredCards.slice(start, end).forEach(card => card.style.display = '');
 
-            // No results message
             noResults.classList.toggle('hidden', total > 0);
 
-            // Build pagination controls
             paginationEl.innerHTML = '';
             if (totalPages <= 1) return;
 
@@ -227,7 +223,6 @@ try {
             const btnInactive = btnBase + 'bg-[#fcfbf7] text-school-green border border-school-gold/30 hover:bg-school-green/10';
             const btnDisabled = btnBase + 'bg-gray-100 text-gray-400 cursor-not-allowed';
 
-            // Prev
             const prev = document.createElement('button');
             prev.textContent = '← Prev';
             prev.className = currentPage === 1 ? btnDisabled : btnInactive;
@@ -235,7 +230,6 @@ try {
             prev.onclick = () => { currentPage--; renderPage(); scrollToGrid(); };
             paginationEl.appendChild(prev);
 
-            // Page numbers
             const pageNums = getPageRange(currentPage, totalPages);
             pageNums.forEach(p => {
                 if (p === '...') {
@@ -252,7 +246,6 @@ try {
                 paginationEl.appendChild(btn);
             });
 
-            // Next
             const next = document.createElement('button');
             next.textContent = 'Next →';
             next.className = currentPage === totalPages ? btnDisabled : btnInactive;
@@ -260,7 +253,6 @@ try {
             next.onclick = () => { currentPage++; renderPage(); scrollToGrid(); };
             paginationEl.appendChild(next);
 
-            // Count label
             const label = document.createElement('p');
             const showing_start = total === 0 ? 0 : start + 1;
             const showing_end   = Math.min(end, total);
@@ -280,7 +272,6 @@ try {
             document.getElementById('courseGrid').scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
 
-        // ── Search handler ─────────────────────────────────
         searchInput.addEventListener('input', function () {
             const q = this.value.toLowerCase().trim();
             applySearch(q);
@@ -288,7 +279,6 @@ try {
             renderPage();
         });
 
-        // Initial render
         renderPage();
     </script>
 </body>
