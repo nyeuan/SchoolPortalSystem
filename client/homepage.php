@@ -9,11 +9,8 @@ $initials   = strtoupper(substr($first_name, 0, 1) . substr($last_name, 0, 1));
 $full_name  = $first_name . ' ' . $last_name;
 $student_id = $_SESSION['user_id'];
 
-// Define connection parameters locally to isolate configuration dependencies
-$host     = 'localhost';
-$dbname   = 'learningmanagementsystem';
-$username = 'root';
-$password = '';
+// Dynamic navigation context tracker
+$active = 'home';
 
 try {
     // 1. Get total active enrolled courses for this student
@@ -25,7 +22,7 @@ try {
     $course_count_stmt->execute([':user_id' => $student_id]);
     $course_count = $course_count_stmt->fetchColumn();
 
-    // 2. Get total pending activities due (enrolled courses, not submitted, not past due)
+    // 2. Get total pending activities due
     $pending_count_stmt = $pdo->prepare("
         SELECT COUNT(*) 
         FROM Assignments a
@@ -43,18 +40,27 @@ try {
     ]);
     $pending_activities_count = $pending_count_stmt->fetchColumn();
 
-    // 3. Extract recent bulletins connected strictly to this student's courses
+    // 3. Pull recent bulletins connected strictly to this student's portfolio OR global system announcements
     $ann_stmt = $pdo->prepare("
-        SELECT a.Title, a.Message, a.PostDate, c.CourseCode 
+        SELECT DISTINCT a.Title, a.Message, a.PostDate, c.CourseCode 
         FROM Announcements a
         INNER JOIN Courses c ON a.FK_Course_ID = c.Course_ID
-        INNER JOIN Enrollment e ON c.Course_ID = e.FK_Course_ID
-        WHERE e.FK_User_ID = :user_id AND e.EnrollmentStatus = 'Enrolled'
+        LEFT JOIN Enrollment e ON c.Course_ID = e.FK_Course_ID AND e.FK_User_ID = :user_id AND e.EnrollmentStatus = 'Enrolled'
+        WHERE e.FK_User_ID IS NOT NULL OR c.CourseCode = 'ADMIN'
         ORDER BY a.PostDate DESC 
-        LIMIT 3
+        LIMIT 40
     ");
     $ann_stmt->execute([':user_id' => $student_id]);
-    $recent_announcements = $ann_stmt->fetchAll();
+    $all_announcements = $ann_stmt->fetchAll();
+
+    // Separate announcements into structural arrays
+    $admin_announcements  = [];
+
+    foreach ($all_announcements as $ann) {
+        if ($ann['CourseCode'] === 'ADMIN') {
+            $admin_announcements[] = $ann;
+        }
+    }
 
 } catch (PDOException $e) {
     die("Error processing dashboard metrics: " . $e->getMessage());
@@ -83,6 +89,22 @@ try {
                 }
             }
         }
+
+        // True Toggle Logic for the Global System Bulletins card
+        function toggleAdminLogs() {
+            const hiddenContainer = document.getElementById('extendedAdminLogs');
+            const toggleBtn = document.getElementById('adminToggleBtn');
+            
+            if (hiddenContainer && toggleBtn) {
+                if (hiddenContainer.classList.contains('hidden')) {
+                    hiddenContainer.classList.remove('hidden');
+                    toggleBtn.innerHTML = 'Show Less Logs ▴';
+                } else {
+                    hiddenContainer.classList.add('hidden');
+                    toggleBtn.innerHTML = 'Show More Logs ▾';
+                }
+            }
+        }
     </script>
 </head>
 <body class="bg-gradient-to-br from-school-green via-[#125730] to-school-yellow min-h-screen font-serif text-gray-800 flex flex-col md:flex-row">
@@ -98,100 +120,114 @@ try {
             </div>
 
             <nav class="space-y-2">
-                <a href="homepage.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl bg-school-green text-white font-semibold transition shadow-md">
-                    <span class="text-xl">🏛️</span>
-                    <span>Institution Home</span>
+                <a href="homepage.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl transition font-semibold <?= $active === 'home' ? 'bg-school-green text-white shadow-md' : 'text-school-green hover:bg-school-green hover:text-white' ?>">
+                    <span>🏛️</span> <span>Institution Home</span>
                 </a>
-                <a href="courses.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
-                    <span class="text-xl opacity-70 group-hover:opacity-100">📚</span>
-                    <span>Courses</span>
+                <a href="announcements.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl transition font-semibold <?= $active === 'announcements' ? 'bg-school-green text-white shadow-md' : 'text-school-green hover:bg-school-green hover:text-white' ?>">
+                    <span>📢</span> <span>Announcements</span>
                 </a>
-                <a href="activities.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
-                    <span class="text-xl opacity-70 group-hover:opacity-100">🏆</span>
-                    <span>Activities</span>
+                <a href="courses.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl transition font-semibold <?= $active === 'courses' ? 'bg-school-green text-white shadow-md' : 'text-school-green hover:bg-school-green hover:text-white' ?>">
+                    <span>📚</span> <span>Courses</span>
                 </a>
-                <a href="grades.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
-                    <span class="text-xl opacity-70 group-hover:opacity-100">📊</span>
-                    <span>Grades</span>
+                <a href="activities.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl transition font-semibold <?= $active === 'activities' ? 'bg-school-green text-white shadow-md' : 'text-school-green hover:bg-school-green hover:text-white' ?>">
+                    <span>🏆</span> <span>Activities</span>
                 </a>
-
-                <a href="Account-info.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
-                    <span class="text-xl opacity-70 group-hover:opacity-100">👤</span>
-                    <span>Account</span>
+                <a href="grades.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl transition font-semibold <?= $active === 'grades' ? 'bg-school-green text-white shadow-md' : 'text-school-green hover:bg-school-green hover:text-white' ?>">
+                    <span>📊</span> <span>Grades</span>
+                </a>
+                <a href="Account-info.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl transition font-semibold <?= $active === 'account' ? 'bg-school-green text-white shadow-md' : 'text-school-green hover:bg-school-green hover:text-white' ?>">
+                    <span>👤</span> <span>Account</span>
                 </a>
             </nav>
         </div>
 
         <div class="mt-8 pt-4 border-t border-gray-200 flex items-center justify-between">
             <div class="flex items-center space-x-3">
-                <div class="w-9 h-9 rounded-full bg-school-gold text-white flex items-center justify-center font-bold font-sans text-sm shadow-sm">
-                    <?= $initials ?>
-                </div>
+                <div class="w-9 h-9 rounded-full bg-school-gold text-white flex items-center justify-center font-bold font-sans text-sm shadow-sm"><?= $initials ?></div>
                 <div>
                     <h4 class="text-sm font-bold text-school-green leading-tight"><?= $full_name ?></h4>
                     <p class="text-xs text-gray-500">Student Account</p>
                 </div>
             </div>
-            <a href="logout.php" title="Log Out" class="text-gray-400 hover:text-red-600 transition p-1 text-lg">
-                🚪
-            </a>
+            <a href="logout.php" class="text-gray-400 hover:text-red-600 transition p-1 text-lg">🚪</a>
         </div>
     </aside>
 
     <main class="flex-1 p-4 sm:p-8 overflow-y-auto max-w-7xl mx-auto w-full">
-        
         <header class="bg-[#fcfbf7] rounded-2xl p-6 sm:p-8 shadow-lg border border-school-gold/20 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
                 <h1 class="text-3xl font-bold tracking-wide text-school-green">Welcome back, <?= $first_name ?>!</h1>
                 <p class="text-gray-600 italic mt-1">"The roots of education are bitter, but the fruit is sweet."</p>
             </div>
-            <div class="bg-school-green/5 text-school-green text-sm px-4 py-2 rounded-xl border border-school-green/10 font-sans">
-                📅 School Year: <span class="font-bold">2026-2027</span>
-            </div>
+            <div class="bg-school-green/5 text-school-green text-sm px-4 py-2 rounded-xl border border-school-green/10 font-sans">📅 School Year: 2026-2027</div>
         </header>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            
             <div class="lg:col-span-2 space-y-6">
                 
-                <section class="bg-[#fcfbf7] rounded-2xl p-6 shadow-lg border border-school-gold/20">
-                    <h3 class="text-xl font-bold text-school-green border-b border-gray-100 pb-3 mb-4">🏫 Institutional Announcements</h3>
-                    <!-- Announcements content goes here -->
-                    <?php if (empty($recent_announcements)): ?>
-                            <p class="text-sm text-gray-400 italic">No historical announcements distributed for your assigned courses.</p>
-                        <?php else: ?>
-                            <div class="space-y-4 font-sans">
-                                <?php foreach ($recent_announcements as $announcement): ?>
-                                    <div class="bg-gray-50 p-3 rounded-xl border border-gray-200/60 relative">
-                                        <span class="absolute top-3 right-3 text-[10px] font-bold uppercase tracking-wider bg-school-gold/10 text-school-gold px-2 py-0.5 rounded">
-                                            <?= htmlspecialchars($announcement['CourseCode']) ?>
-                                        </span>
-                                        <h4 class="font-bold text-school-green text-sm pr-16"><?= htmlspecialchars($announcement['Title']) ?></h4>
-                                        <p class="text-xs text-gray-600 mt-1"><?= htmlspecialchars($announcement['Message']) ?></p>
-                                        <span class="text-[10px] text-gray-400 block mt-2">
-                                            📅 <?= date('M d, Y @ h:i A', strtotime($announcement['PostDate'])) ?>
-                                        </span>
-                                    </div>
-                                <?php endforeach; ?>
-                            </div>
-                        <?php endif; ?>
-                </section>
-
-                <section class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div class="bg-[#fcfbf7] p-5 rounded-2xl shadow-md border border-school-gold/10 flex items-center space-x-4">
-                        <div class="p-3 bg-school-green/10 rounded-xl text-2xl">📚</div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 h-fit">
+                    <div class="bg-[#fcfbf7] p-6 rounded-2xl shadow-md border border-school-gold/10 flex items-center space-x-4">
+                        <div class="p-4 bg-school-green/10 rounded-xl text-2xl">📚</div>
                         <div>
                             <h4 class="text-xs font-sans uppercase text-gray-400 tracking-wider font-semibold">Active Enrolled Courses</h4>
-                            <p class="text-2xl font-bold text-school-green mt-1 font-sans"><?= (int)$course_count ?></p>
+                            <p class="text-3xl font-bold text-school-green mt-1 font-sans"><?= (int)$course_count ?></p>
                         </div>
                     </div>
-                    <div class="bg-[#fcfbf7] p-5 rounded-2xl shadow-md border border-school-gold/10 flex items-center space-x-4">
-                        <div class="p-3 bg-school-gold/10 rounded-xl text-2xl">📝</div>
+                    <div class="bg-[#fcfbf7] p-6 rounded-2xl shadow-md border border-school-gold/10 flex items-center space-x-4">
+                        <div class="p-4 bg-school-gold/10 rounded-xl text-2xl">📝</div>
                         <div>
                             <h4 class="text-xs font-sans uppercase text-gray-400 tracking-wider font-semibold">Pending Activities Due</h4>
-                            <p class="text-2xl font-bold text-school-green mt-1 font-sans"><?= (int)$pending_activities_count ?></p>
+                            <p class="text-3xl font-bold text-school-green mt-1 font-sans"><?= (int)$pending_activities_count ?></p>
                         </div>
                     </div>
+                </div>
+
+                <section class="bg-[#fcfbf7] rounded-2xl p-6 shadow-lg border border-school-gold/20">
+                    <h3 class="text-xl font-bold text-school-green border-b border-gray-100 pb-3 mb-4">📢 Institutional Announcements</h3>
+                    
+                    <?php if (empty($admin_announcements)): ?>
+                        <p class="text-sm text-gray-400 italic">No global system administrative notices issued at this time.</p>
+                    <?php else: ?>
+                        <div class="space-y-4 font-sans">
+                            <?php 
+                            $aIndex = 0;
+                            $hasAdminDropdown = count($admin_announcements) > 3;
+                            $isOpenAdminDiv = false;
+
+                            foreach ($admin_announcements as $announcement): 
+                                if ($aIndex === 3): 
+                                    $isOpenAdminDiv = true; ?>
+                                    <div id="extendedAdminLogs" class="hidden space-y-4 pt-4 border-t border-dashed border-gray-200">
+                                <?php endif; ?>
+
+                                <div class="bg-amber-50/60 p-3 rounded-xl border border-amber-200 relative">
+                                    <span class="absolute top-3 right-3 text-[10px] font-bold uppercase tracking-wider bg-school-green text-white px-2 py-0.5 rounded border border-school-green-light flex items-center gap-1 shadow-sm">
+                                        📅 <?= date('M d, Y', strtotime($announcement['PostDate'])) ?>
+                                    </span>
+                                    <h4 class="font-bold text-school-green text-sm pr-32"><?= htmlspecialchars($announcement['Title']) ?></h4>
+                                    <p class="text-xs text-gray-600 mt-1"><?= htmlspecialchars($announcement['Message']) ?></p>
+                                    <span class="text-[10px] text-gray-400 block mt-2">
+                                        📅 <?= date('M d, Y @ h:i A', strtotime($announcement['PostDate'])) ?>
+                                    </span>
+                                </div>
+
+                            <?php 
+                                $aIndex++;
+                            endforeach; 
+
+                            if ($isOpenAdminDiv): ?>
+                                </div>
+                            <?php endif; ?>
+
+                            <?php if ($hasAdminDropdown): ?>
+                                <div class="text-center pt-2">
+                                    <button id="adminToggleBtn" onclick="toggleAdminLogs()" class="text-xs text-school-green font-bold bg-school-green/5 border border-school-green/10 hover:bg-school-green/10 transition px-4 py-2 rounded-xl inline-flex items-center gap-1">
+                                        Show More Logs ▾
+                                    </button>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
                 </section>
             </div>
 
@@ -199,18 +235,9 @@ try {
                 <section class="bg-[#fcfbf7] rounded-2xl p-6 shadow-lg border border-school-gold/20">
                     <h3 class="text-lg font-bold text-school-green border-b border-gray-100 pb-2 mb-3">⚡ Quick Portal Access</h3>
                     <div class="grid grid-cols-1 gap-2.5 font-sans">
-                        <a href="courses.php" class="p-3 bg-gray-50 rounded-xl hover:bg-school-green/5 border border-gray-200 hover:border-school-green/20 transition flex justify-between items-center text-sm font-medium">
-                            <span>Open Enrolled Courses</span>
-                            <span class="text-school-green">→</span>
-                        </a>
-                        <a href="activities.php" class="p-3 bg-gray-50 rounded-xl hover:bg-school-green/5 border border-gray-200 hover:border-school-green/20 transition flex justify-between items-center text-sm font-medium">
-                            <span>View Calendar Deadlines</span>
-                            <span class="text-school-green">→</span>
-                        </a>
-                        <a href="grades.php" class="p-3 bg-gray-50 rounded-xl hover:bg-school-green/5 border border-gray-200 hover:border-school-green/20 transition flex justify-between items-center text-sm font-medium">
-                            <span>Check Report Card History</span>
-                            <span class="text-school-green">→</span>
-                        </a>
+                        <a href="courses.php" class="p-3 bg-gray-50 rounded-xl hover:bg-school-green/5 border border-gray-200 transition flex justify-between items-center text-sm font-medium"><span>Open Enrolled Courses</span><span class="text-school-green">→</span></a>
+                        <a href="activities.php" class="p-3 bg-gray-50 rounded-xl hover:bg-school-green/5 border border-gray-200 transition flex justify-between items-center text-sm font-medium"><span>View Calendar Deadlines</span><span class="text-school-green">→</span></a>
+                        <a href="grades.php" class="p-3 bg-gray-50 rounded-xl hover:bg-school-green/5 border border-gray-200 transition flex justify-between items-center text-sm font-medium"><span>Check Report Card History</span><span class="text-school-green">→</span></a>
                     </div>
                 </section>
 
@@ -221,9 +248,7 @@ try {
                     <p class="text-xs text-gray-300 mt-2 leading-relaxed">Instilled during the foundation year of 1994, St. Ives School continues to nurture lifelong learners focused on community enrichment.</p>
                 </section>
             </div>
-
         </div>
     </main>
-
 </body>
 </html>

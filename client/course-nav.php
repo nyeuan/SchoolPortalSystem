@@ -21,6 +21,7 @@ $nav_tabs = [
     'announcements' => ['label' => 'Announcements', 'icon' => '📢', 'url' => $nav_announcement_url],
     'attendance'    => ['label' => 'Attendance',    'icon' => '🗓️', 'url' => $nav_attendance_url],
     'coursegrades'  => ['label' => 'Grades',        'icon' => '📊', 'url' => $nav_coursegrades_url],
+    'roster'        => ['label' => 'Roster',        'icon' => '👥', 'url' => "course-roster.php?course_id=$course_id"],
 ];
 ?>
 <nav class="bg-[#fcfbf7] rounded-2xl shadow-lg border border-school-gold/20 mb-6 px-3 py-2 flex gap-2 font-sans overflow-x-auto">

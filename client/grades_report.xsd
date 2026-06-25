@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="AcademicReport">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="StudentName" type="xs:string"/>
+        <xs:element name="SchoolYear" type="xs:string"/>
+        <xs:element name="CourseRecords">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="Record" maxOccurs="unbounded">
+                <xs:complexType>
+                  <xs:sequence>
+                    <xs:element name="CourseCode" type="xs:string"/>
+                    <xs:element name="CourseName" type="xs:string"/>
+                    <xs:element name="Percentage" type="xs:decimal"/>
+                    <xs:element name="LetterGrade" type="xs:string"/>
+                    <xs:element name="Remarks" type="xs:string"/>
+                  </xs:sequence>
+                </xs:complexType>
+              </xs:element>
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>

@@ -7,6 +7,9 @@ $user_id = $_SESSION['user_id'];
 $success_msg = null;
 $error_msg = null;
 
+// Dynamic navigation context tracker
+$active = 'account';
+
 // Form Handling Processing Sequence
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $gender = trim($_POST['gender'] ?? '');
@@ -17,12 +20,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($gender) || empty($contact_num)) {
         $error_msg = "Gender and Contact Number fields cannot be empty.";
     } else if (!empty($new_password) && $new_password !== $confirm_password) {
-        // Validation: Re-typed password match verification check
         $error_msg = "New password and confirmation password do not match.";
     } else {
         try {
             if (!empty($new_password)) {
-                // Securely hash the password input text using standard modern hashing paradigms
                 $password_hash = password_hash($new_password, PASSWORD_BCRYPT);
                 
                 $update_stmt = $pdo->prepare("
@@ -37,7 +38,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':user_id'       => $user_id
                 ]);
             } else {
-                // Update optional parameters without modifying current credential states
                 $update_stmt = $pdo->prepare("
                     UPDATE Users 
                     SET ContactNum = :contact_num, Gender = :gender 
@@ -56,7 +56,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Fetch the latest current records from database space models to fill form metrics
 try {
     $user_stmt = $pdo->prepare("
         SELECT LastName, FirstName, Email, ContactNum, Gender, r.RoleName 
@@ -71,7 +70,6 @@ try {
         die("User context authentication profiles missing.");
     }
 
-    // Prepare header block context variables
     $first_name = htmlspecialchars($user_profile['FirstName']);
     $last_name  = htmlspecialchars($user_profile['LastName']);
     $initials   = strtoupper(substr($first_name, 0, 1) . substr($last_name, 0, 1));
@@ -110,39 +108,34 @@ try {
 
             <nav class="space-y-2">
                 <?php if ($_SESSION['role'] === 'Professor'): ?>
-                    <a href="prof-homepage.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
-                        <span class="text-xl">🏛️</span>
-                        <span>Institution Home</span>
+                    <a href="prof-homepage.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl transition font-semibold <?= $active === 'home' ? 'bg-school-green text-white shadow-md hover:bg-school-green-hover' : 'text-school-green hover:bg-school-green hover:text-white' ?>">
+                        <span>🏛️</span> <span>Institution Home</span>
                     </a>
-                    <a href="prof-courses.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
-                        <span class="text-xl opacity-70 group-hover:opacity-100">📚</span>
-                        <span>Courses</span>
+                    <a href="prof-courses.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl transition font-semibold <?= $active === 'courses' ? 'bg-school-green text-white shadow-md hover:bg-school-green-hover' : 'text-school-green hover:bg-school-green hover:text-white' ?>">
+                        <span>📚</span> <span>Courses</span>
                     </a>
-                    <a href="Account-info.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl bg-school-green text-white font-semibold transition shadow-md">
-                        <span class="text-xl">👤</span>
-                        <span>Account</span>
+                    <a href="Account-info.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl transition font-semibold <?= $active === 'account' ? 'bg-school-green text-white shadow-md hover:bg-school-green-hover' : 'text-school-green hover:bg-school-green hover:text-white' ?>">
+                        <span>👤</span> <span>Account</span>
                     </a>
 
                 <?php else: ?>
-                    <a href="homepage.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
-                        <span class="text-xl">🏛️</span>
-                        <span>Institution Home</span>
+                    <a href="homepage.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl transition font-semibold <?= $active === 'home' ? 'bg-school-green text-white shadow-md hover:bg-school-green-hover' : 'text-school-green hover:bg-school-green hover:text-white' ?>">
+                        <span>🏛️</span> <span>Institution Home</span>
                     </a>
-                    <a href="courses.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
-                        <span class="text-xl opacity-70 group-hover:opacity-100">📚</span>
-                        <span>Courses</span>
+                    <a href="announcements.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl transition font-semibold <?= $active === 'announcements' ? 'bg-school-green text-white shadow-md hover:bg-school-green-hover' : 'text-school-green hover:bg-school-green hover:text-white' ?>">
+                        <span>📢</span> <span>Announcements</span>
                     </a>
-                    <a href="activities.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
-                        <span class="text-xl opacity-70 group-hover:opacity-100">🏆</span>
-                        <span>Activities</span>
+                    <a href="courses.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl transition font-semibold <?= $active === 'courses' ? 'bg-school-green text-white shadow-md hover:bg-school-green-hover' : 'text-school-green hover:bg-school-green hover:text-white' ?>">
+                        <span>📚</span> <span>Courses</span>
                     </a>
-                    <a href="grades.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
-                        <span class="text-xl opacity-70 group-hover:opacity-100">📊</span>
-                        <span>Grades</span>
+                    <a href="activities.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl transition font-semibold <?= $active === 'activities' ? 'bg-school-green text-white shadow-md hover:bg-school-green-hover' : 'text-school-green hover:bg-school-green hover:text-white' ?>">
+                        <span>🏆</span> <span>Activities</span>
                     </a>
-                    <a href="Account-info.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl bg-school-green text-white font-semibold transition shadow-md">
-                        <span class="text-xl">👤</span>
-                        <span>Account</span>
+                    <a href="grades.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl transition font-semibold <?= $active === 'grades' ? 'bg-school-green text-white shadow-md hover:bg-school-green-hover' : 'text-school-green hover:bg-school-green hover:text-white' ?>">
+                        <span>📊</span> <span>Grades</span>
+                    </a>
+                    <a href="Account-info.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl transition font-semibold <?= $active === 'account' ? 'bg-school-green text-white shadow-md hover:bg-school-green-hover' : 'text-school-green hover:bg-school-green hover:text-white' ?>">
+                        <span>👤</span> <span>Account</span>
                     </a>
                 <?php endif; ?>
             </nav>
@@ -156,9 +149,7 @@ try {
                     <p class="text-xs text-gray-500"><?= htmlspecialchars($user_profile['RoleName']) ?> Account</p>
                 </div>
             </div>
-            <a href="logout.php" title="Log Out" class="text-gray-400 hover:text-red-600 transition p-1 text-lg">
-                🚪
-            </a>
+            <a href="logout.php" title="Log Out" class="text-gray-400 hover:text-red-600 transition p-1 text-lg">🚪</a>
         </div>
     </aside>
 
