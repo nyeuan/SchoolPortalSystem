@@ -15,7 +15,7 @@ $error_msg = null; //
 $selected_grade_id = isset($_GET['grade_level_id']) ? (int)$_GET['grade_level_id'] : 0;
 $search            = isset($_GET['search']) ? trim($_GET['search']) : ''; //
 $page              = max(1, isset($_GET['page']) ? (int)$_GET['page'] : 1);
-$limit             = 6; // Courses per page
+$limit             = 6; // Courses displayed per page
 $offset            = ($page - 1) * $limit;
 
 try {
@@ -23,85 +23,96 @@ try {
     $grade_levels_list = $pdo->query("SELECT * FROM GradeLevel ORDER BY GradeName ASC")->fetchAll();
     $sections_list     = $pdo->query("SELECT * FROM Section ORDER BY SectionName ASC")->fetchAll();
 
-    if ($selected_grade_id === 0) {
-        // STATE 1: Fetch Grade Levels with dynamic course counters
-        $grade_stmt = $pdo->query("
-            SELECT 
-                gl.GradeLevel_ID, 
-                gl.GradeName,
-                COUNT(DISTINCT sc.FK_Course_ID) AS TotalCourses,
-                COUNT(DISTINCT sec.Section_ID) AS TotalSections
-            FROM GradeLevel gl
-            LEFT JOIN Section sec ON gl.GradeLevel_ID = sec.FK_GradeLevel_ID
-            LEFT JOIN SectionCourses sc ON sec.Section_ID = sc.FK_Section_ID
-            GROUP BY gl.GradeLevel_ID
-            ORDER BY gl.GradeName ASC
-        ");
-        $grade_cards = $grade_stmt->fetchAll();
-    } else {
-        // STATE 2: Fetch detailed metadata for the selected Grade Level banner
+    // Always fetch grade summary stats for the directory cards at the top
+    $grade_stmt = $pdo->query("
+        SELECT 
+            gl.GradeLevel_ID, 
+            gl.GradeName,
+            COUNT(DISTINCT sc.FK_Course_ID) AS TotalCourses,
+            COUNT(DISTINCT sec.Section_ID) AS TotalSections
+        FROM GradeLevel gl
+        LEFT JOIN Section sec ON gl.GradeLevel_ID = sec.FK_GradeLevel_ID
+        LEFT JOIN SectionCourses sc ON sec.Section_ID = sc.FK_Section_ID
+        GROUP BY gl.GradeLevel_ID
+        ORDER BY gl.GradeName ASC
+    ");
+    $grade_cards = $grade_stmt->fetchAll();
+
+    // Set header labels dynamically
+    $current_grade_name = "Global Academic Directory";
+    if ($selected_grade_id > 0) {
         $current_grade_stmt = $pdo->prepare("SELECT GradeName FROM GradeLevel WHERE GradeLevel_ID = ?");
         $current_grade_stmt->execute([$selected_grade_id]);
         $current_grade_name = $current_grade_stmt->fetchColumn() ?: 'Academic Tier';
-
-        // Build dynamic SQL query filtering courses by selected GradeLevel
-        $where_clauses = ["gl.GradeLevel_ID = :grade_id"];
-        $params = [':grade_id' => $selected_grade_id];
-
-        if (!empty($search)) {
-            $where_clauses[] = "(c.CourseCode LIKE :search OR c.CourseName LIKE :search OR sec.SectionName LIKE :search)";
-            $params[':search'] = '%' . $search . '%';
-        }
-
-        $where_sql = implode(' AND ', $where_clauses);
-
-        // Count total rows for pagination limits
-        $count_stmt = $pdo->prepare("
-            SELECT COUNT(DISTINCT c.Course_ID)
-            FROM Courses c
-            INNER JOIN SectionCourses sc ON c.Course_ID = sc.FK_Course_ID
-            INNER JOIN Section sec       ON sc.FK_Section_ID = sec.Section_ID
-            INNER JOIN GradeLevel gl     ON sec.FK_GradeLevel_ID = gl.GradeLevel_ID
-            WHERE $where_sql
-        ");
-        $count_stmt->execute($params);
-        $total_courses = $count_stmt->fetchColumn();
-        $total_pages   = ceil($total_courses / $limit);
-
-        // Fetch paginated course selection
-        $course_query = "
-            SELECT 
-                c.Course_ID, c.CourseCode, c.CourseName, c.Status,
-                sec.SectionName, gl.GradeName
-            FROM Courses c
-            INNER JOIN SectionCourses sc ON c.Course_ID = sc.FK_Course_ID
-            INNER JOIN Section sec       ON sc.FK_Section_ID = sec.Section_ID
-            INNER JOIN GradeLevel gl     ON sec.FK_GradeLevel_ID = gl.GradeLevel_ID
-            WHERE $where_sql
-            ORDER BY sec.SectionName ASC, c.CourseCode ASC
-            LIMIT :limit OFFSET :offset
-        ";
-
-        $course_stmt = $pdo->prepare($course_query);
-        // Bind parameters explicitly to maintain strict integer pagination data types
-        $course_stmt->bindValue(':grade_id', $selected_grade_id, PDO::PARAM_INT);
-        if (!empty($search)) {
-            $course_stmt->bindValue(':search', '%' . $search . '%', PDO::PARAM_STR);
-        }
-        $course_stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
-        $course_stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-        $course_stmt->execute();
-        $courses = $course_stmt->fetchAll();
     }
+
+    // ── Dynamic Course List Generation Query ────────────────
+    $where_clauses = [];
+    $params = [];
+
+    // Filter by grade level if explicitly selected via card click
+    if ($selected_grade_id > 0) {
+        $where_clauses[] = "gl.GradeLevel_ID = :grade_id";
+        $params[':grade_id'] = $selected_grade_id;
+    }
+
+    // Apply search filtering rules if requested
+    if (!empty($search)) {
+        $where_clauses[] = "(c.CourseCode LIKE :search OR c.CourseName LIKE :search OR sec.SectionName LIKE :search OR gl.GradeName LIKE :search)";
+        $params[':search'] = '%' . $search . '%';
+    }
+
+    $where_sql = !empty($where_clauses) ? "WHERE " . implode(' AND ', $where_clauses) : "";
+
+    // FIXED: Changed COUNT(DISTINCT c.Course_ID) to COUNT(*) so all section-specific courses are accounted for.
+    // This allows pagination to accurately reflect total records and expand past 2 pages properly.
+    $count_stmt = $pdo->prepare("
+        SELECT COUNT(*)
+        FROM Courses c
+        INNER JOIN SectionCourses sc ON c.Course_ID = sc.FK_Course_ID
+        INNER JOIN Section sec       ON sc.FK_Section_ID = sec.Section_ID
+        INNER JOIN GradeLevel gl     ON sec.FK_GradeLevel_ID = gl.GradeLevel_ID
+        $where_sql
+    ");
+    $count_stmt->execute($params);
+    $total_courses = $count_stmt->fetchColumn();
+    $total_pages   = ceil($total_courses / $limit);
+
+    // Fetch paginated course records
+    $course_query = "
+        SELECT 
+            c.Course_ID, c.CourseCode, c.CourseName, c.Status,
+            sec.SectionName, gl.GradeName
+        FROM Courses c
+        INNER JOIN SectionCourses sc ON c.Course_ID = sc.FK_Course_ID
+        INNER JOIN Section sec       ON sc.FK_Section_ID = sec.Section_ID
+        INNER JOIN GradeLevel gl     ON sec.FK_GradeLevel_ID = gl.GradeLevel_ID
+        $where_sql
+        ORDER BY gl.GradeName ASC, sec.SectionName ASC, c.CourseCode ASC
+        LIMIT :limit OFFSET :offset
+    ";
+
+    $course_stmt = $pdo->prepare($course_query);
+    if ($selected_grade_id > 0) {
+        $course_stmt->bindValue(':grade_id', $selected_grade_id, PDO::PARAM_INT);
+    }
+    if (!empty($search)) {
+        $course_stmt->bindValue(':search', '%' . $search . '%', PDO::PARAM_STR);
+    }
+    $course_stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+    $course_stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+    $course_stmt->execute();
+    $courses = $course_stmt->fetchAll();
 
 } catch (PDOException $e) {
     die("Database Error: " . $e->getMessage()); //
 }
 
-// System notification routing mappings
+// System messaging channels
 $success_messages = [
-    'course_added'   => 'Course record successfully created and assigned to the selected section.', //
-    'course_deleted' => 'Course record removed from database index storage.', //
+    'course_added'    => 'Course record successfully created and assigned to the selected section.', //
+    'course_deleted'  => 'Course record removed from database index storage.', //
+    'section_created' => 'New section directory lane added successfully to this institution profile mapping hierarchy.',
 ];
 $error_messages = [
     'missing_fields' => 'Please fill in all fields with valid configurations.', //
@@ -159,77 +170,78 @@ $active = 'courses'; //
         <section class="bg-[#fcfbf7] rounded-3xl p-6 shadow-lg border border-school-gold/20 mb-6 shrink-0">
             <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
                 <div>
-                    <h1 class="text-4xl font-bold text-school-green">
-                        <?= $selected_grade_id > 0 ? htmlspecialchars($current_grade_name) : 'Course Management' ?>
-                    </h1>
+                    <h1 class="text-4xl font-bold text-school-green">Course Management</h1>
                     <p class="text-gray-500 italic mt-1">
-                        <?= $selected_grade_id > 0 ? 'Managing courses under this academic tier' : 'Select an academic grade level to manage courses' ?>
+                        Viewing: <?= htmlspecialchars($current_grade_name) ?>
                     </p>
                 </div>
-                <div class="flex items-center gap-3">
-                    <?php if ($selected_grade_id > 0): ?>
-                        <a href="admin-manage-course.php" class="bg-gray-100 text-gray-700 px-5 py-3 rounded-2xl font-semibold hover:bg-gray-200 transition text-sm font-sans">
-                            ← Back to Grade Levels
+                <div class="flex flex-wrap items-center gap-2">
+                    <?php if ($selected_grade_id > 0 || !empty($search)): ?>
+                        <a href="admin-manage-course.php" class="bg-gray-100 text-gray-700 px-4 py-2.5 rounded-2xl font-semibold hover:bg-gray-200 transition text-xs font-sans">
+                            ← Reset View
                         </a>
                     <?php endif; ?>
+                    
+                    <button onclick="document.getElementById('addSectionModal').classList.remove('hidden')"
+                            class="bg-school-gold text-white px-5 py-2.5 rounded-2xl font-semibold hover:opacity-90 transition text-xs font-sans whitespace-nowrap">
+                        + Add Section
+                    </button>
+                    
                     <button onclick="document.getElementById('addCourseModal').classList.remove('hidden')"
-                            class="bg-school-green text-white px-6 py-3 rounded-2xl font-semibold hover:bg-school-green-hover transition text-sm font-sans whitespace-nowrap">
-                        + Add New Course
+                            class="bg-school-green text-white px-5 py-2.5 rounded-2xl font-semibold hover:bg-school-green-hover transition text-xs font-sans whitespace-nowrap">
+                        + Add Course
                     </button>
                 </div>
             </div>
 
-            <?php if ($selected_grade_id > 0): ?>
-                <div class="mt-6 border-t border-gray-100 pt-4">
-                    <form action="admin-manage-course.php" method="GET" class="flex gap-2 font-sans">
+            <div class="mt-6 border-t border-gray-100 pt-4">
+                <form action="admin-manage-course.php" method="GET" class="flex gap-2 font-sans">
+                    <?php if ($selected_grade_id > 0): ?>
                         <input type="hidden" name="grade_level_id" value="<?= $selected_grade_id ?>">
-                        <input type="text" name="search" value="<?= htmlspecialchars($search) ?>" 
-                               placeholder="Search courses inside this grade level by code, title, or section name..." 
-                               class="w-full border border-gray-300 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-school-green text-sm">
-                        <button type="submit" class="bg-school-gold text-white px-6 py-2.5 rounded-xl font-semibold hover:opacity-90 transition text-sm">
-                            Search
-                        </button>
-                        <?php if (!empty($search)): ?>
-                            <a href="admin-manage-course.php?grade_level_id=<?= $selected_grade_id ?>" class="bg-gray-100 text-gray-700 px-4 py-2.5 rounded-xl text-sm flex items-center justify-center hover:bg-gray-200 transition">
-                                Reset
-                            </a>
-                        <?php endif; ?>
-                    </form>
-                </div>
-            <?php endif; ?>
+                    <?php endif; ?>
+                    <input type="text" name="search" value="<?= htmlspecialchars($search) ?>" 
+                           placeholder="Search directory globally by code, course name, section, or grade tier descriptor..." 
+                           class="w-full border border-gray-300 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-school-green text-sm">
+                    <button type="submit" class="bg-school-gold text-white px-6 py-2.5 rounded-xl font-semibold hover:opacity-90 transition text-sm">
+                        Search
+                    </button>
+                </form>
+            </div>
         </section>
 
-        <div class="flex-1">
-            <?php if ($selected_grade_id === 0): ?>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 font-sans">
+        <div class="flex-1 flex flex-col gap-6">
+            
+            <div>
+                <h2 class="text-xl font-bold text-white mb-3 font-sans flex items-center gap-2">
+                    <span>🎓 Academic Tiers</span>
+                    <?php if ($selected_grade_id > 0): ?>
+                        <span class="text-xs bg-school-gold text-white px-2 py-0.5 rounded-md font-normal">Filtered view active</span>
+                    <?php endif; ?>
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 font-sans">
                     <?php foreach ($grade_cards as $card): ?>
                         <a href="admin-manage-course.php?grade_level_id=<?= $card['GradeLevel_ID'] ?>" 
-                           class="block bg-[#fcfbf7] rounded-3xl p-6 shadow-md border border-school-gold/15 hover:shadow-xl hover:border-school-green/40 transition group relative overflow-hidden">
-                            <div class="absolute -right-4 -bottom-4 text-gray-100 text-7xl font-sans pointer-events-none group-hover:text-school-yellow/10 transition">
-                                🎓
-                            </div>
-                            <h2 class="text-2xl font-bold font-serif text-school-green group-hover:text-school-green-light transition">
+                           class="block bg-[#fcfbf7] rounded-2xl p-4 shadow border transition relative overflow-hidden group <?= ($selected_grade_id === (int)$card['GradeLevel_ID']) ? 'border-school-green ring-2 ring-school-green/20 bg-emerald-50/20' : 'border-school-gold/15 hover:border-school-green/40 hover:shadow-md' ?>">
+                            <h3 class="font-bold text-lg text-school-green">
                                 <?= htmlspecialchars($card['GradeName']) ?>
-                            </h2>
-                            <div class="mt-6 flex gap-4 border-t pt-4 border-gray-100 text-sm">
-                                <p class="text-gray-600">
-                                    📁 <span class="font-bold text-gray-800"><?= (int)$card['TotalSections'] ?></span> Sections
-                                </p>
-                                <p class="text-gray-600">
-                                    📚 <span class="font-bold text-gray-800"><?= (int)$card['TotalCourses'] ?></span> Courses
-                                </p>
-                            </div>
-                            <div class="mt-4 text-xs font-semibold text-school-gold uppercase tracking-wider flex items-center gap-1">
-                                Open <span class="group-hover:translate-x-1 transition inline-block">→</span>
+                            </h3>
+                            <div class="mt-2 flex gap-3 text-xs text-gray-500">
+                                <span>📁 <b><?= (int)$card['TotalSections'] ?></b> Sections</span>
+                                <span>📚 <b><?= (int)$card['TotalCourses'] ?></b> Courses</span>
                             </div>
                         </a>
                     <?php endforeach; ?>
                 </div>
+            </div>
 
-            <?php else: ?>
+            <div class="mt-2 flex-1 flex flex-col">
+                <h2 class="text-xl font-bold text-white mb-3 font-sans">
+                    📚 Course Inventory (Page <?= $page ?> of <?= max(1, $total_pages) ?>)
+                </h2>
+                
                 <?php if (empty($courses)): ?>
-                    <div class="bg-[#fcfbf7] rounded-3xl p-10 text-center shadow-lg border border-school-gold/20">
-                        <p class="text-gray-500 italic font-sans">No matching course listings verified in this grade level slot.</p>
+                    <div class="bg-[#fcfbf7] rounded-3xl p-10 text-center shadow-lg border border-school-gold/20 flex-1 flex items-center justify-center">
+                        <p class="text-gray-500 italic font-sans">No matching academic records found on this directory index plane.</p>
                     </div>
                 <?php else: ?>
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -247,10 +259,10 @@ $active = 'courses'; //
 
                                     <div class="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1">
                                         <span><?= htmlspecialchars($course['GradeName']) ?></span>
-                                        <span class="text-school-gold font-bold"> | </span>
-                                        <span class="text-gray-600"> Section: <?= htmlspecialchars($course['SectionName']) ?></span>
-                                        <span class="text-school-gold font-bold"> | </span>
-                                        
+                                        <span class="text-school-gold font-bold">&gt;</span>
+                                        <span class="text-gray-600"><?= htmlspecialchars($course['SectionName']) ?></span>
+                                        <span class="text-school-gold font-bold">&gt;</span>
+                                        <span class="text-school-green">Course</span>
                                     </div>
 
                                     <h3 class="text-lg font-bold text-school-green font-serif mt-1">
@@ -263,9 +275,8 @@ $active = 'courses'; //
                                        class="text-xs font-semibold bg-blue-50 text-blue-600 border border-blue-200 px-3 py-2 rounded-xl hover:bg-blue-100 transition text-center flex-1">
                                         Assign Users
                                     </a>
-
                                     <form action="admin-add-course.php" method="POST" class="flex-1"
-                                          onsubmit="return confirm('Confirm complete cascading deletion of this section course instance from global lists?');">
+                                          onsubmit="return confirm('Confirm complete cascading deletion of this section course instance?');">
                                         <input type="hidden" name="action" value="delete">
                                         <input type="hidden" name="course_id" value="<?= (int)$course['Course_ID'] ?>">
                                         <button type="submit" class="w-full text-xs font-semibold bg-red-50 text-red-600 border border-red-200 px-3 py-2 rounded-xl hover:bg-red-100 transition text-center">
@@ -283,14 +294,12 @@ $active = 'courses'; //
                                class="px-3 py-2 rounded-xl bg-[#fcfbf7] border border-school-gold/30 text-school-green hover:bg-school-green/5 transition text-xs font-semibold <?= $page === 1 ? 'pointer-events-none opacity-40' : '' ?>">
                                 ← Prev
                             </a>
-
                             <?php foreach (range(1, $total_pages) as $i): ?>
                                 <a href="admin-manage-course.php?grade_level_id=<?= $selected_grade_id ?>&page=<?= $i ?>&search=<?= urlencode($search) ?>"
                                    class="w-8 h-8 flex items-center justify-center rounded-xl text-xs font-bold transition <?= $page === $i ? 'bg-school-green text-white shadow-md' : 'bg-[#fcfbf7] text-school-green border border-school-gold/20 hover:bg-school-green/5' ?>">
                                     <?= $i ?>
                                 </a>
                             <?php endforeach; ?>
-
                             <a href="admin-manage-course.php?grade_level_id=<?= $selected_grade_id ?>&page=<?= min($total_pages, $page + 1) ?>&search=<?= urlencode($search) ?>"
                                class="px-3 py-2 rounded-xl bg-[#fcfbf7] border border-school-gold/30 text-school-green hover:bg-school-green/5 transition text-xs font-semibold <?= $page === $total_pages ? 'pointer-events-none opacity-40' : '' ?>">
                                 Next →
@@ -298,9 +307,41 @@ $active = 'courses'; //
                         </nav>
                     <?php endif; ?>
                 <?php endif; ?>
-            <?php endif; ?>
+            </div>
         </div>
     </main>
+
+    <div id="addSectionModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl font-sans">
+            <h3 class="text-xl font-bold text-school-green mb-4">Create New Section</h3>
+            <form action="admin-add-course.php" method="POST">
+                <input type="hidden" name="action" value="create_section">
+
+                <label class="block text-sm font-semibold text-gray-600 mb-1">Section Name</label>
+                <input type="text" name="section_name" required maxlength="45"
+                    class="w-full border border-gray-300 rounded-xl px-4 py-2 mb-4 focus:outline-none focus:ring-2 focus:ring-school-green text-sm"
+                    placeholder="e.g., Section A">
+
+                <label class="block text-sm font-semibold text-gray-600 mb-1">Parent Grade Level Tier</label>
+                <select name="grade_level_id" required class="w-full border border-gray-300 rounded-xl px-4 py-2 mb-6 focus:outline-none focus:ring-2 focus:ring-school-green bg-white text-sm">
+                    <option value="" disabled selected hidden>Select academic tier...</option>
+                    <?php foreach ($grade_levels_list as $gl): ?>
+                        <option value="<?= (int)$gl['GradeLevel_ID'] ?>" <?= ($selected_grade_id === (int)$gl['GradeLevel_ID']) ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($gl['GradeName']) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+
+                <div class="flex justify-end gap-3">
+                    <button type="button" onclick="document.getElementById('addSectionModal').classList.add('hidden')"
+                        class="px-4 py-2 rounded-xl text-gray-500 hover:bg-gray-100 text-sm">Cancel</button>
+                    <button type="submit" class="bg-school-gold text-white px-5 py-2 rounded-xl font-semibold hover:opacity-90 text-sm">
+                        Create Section
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <div id="addCourseModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
         <div class="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl font-sans max-h-[90vh] overflow-y-auto">
@@ -331,7 +372,7 @@ $active = 'courses'; //
                                 }
                             }
                         ?>
-                        <option value="<?= (int)$sec['Section_ID'] ?>" <?= ($selected_grade_id === (int)$sec['FK_GradeLevel_ID']) ? 'selected' : '' ?>>
+                        <option value="<?= (int)$sec['Section_ID'] ?>">
                             <?= htmlspecialchars($grade_title) ?> &gt; <?= htmlspecialchars($sec['SectionName']) ?>
                         </option>
                     <?php endforeach; ?>
