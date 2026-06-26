@@ -7,45 +7,36 @@ if(isset($_POST['create'])) {
     $fname = $_POST['fname'];
     $lname = $_POST['lname'];
     $email = $_POST['email'];
-    // Standard secure password hashing configuration
-    $password = password_hash($_POST['password'], PASSWORD_DEFAULT);
+    $password = $_POST['password'];
     $role = $_POST['role'];
 
-    try {
-        // Converted raw text SQL to a safe PDO prepared statement
-        $stmt = $pdo->prepare("
-            INSERT INTO Users (
-                FirstName,
-                LastName,
-                Email,
-                PasswordHash,
-                DateCreated,
-                Status,
-                FK_Role_ID
-            ) VALUES (
-                :fname,
-                :lname,
-                :email,
-                :password,
-                NOW(),
-                'Active',
-                :role
-            )
-        ");
+    $sql = "
+    INSERT INTO Users
+    (
+        FirstName,
+        LastName,
+        Email,
+        PasswordHash,
+        DateCreated,
+        Status,
+        FK_Role_ID
+    )
+    VALUES
+    (
+        '$fname',
+        '$lname',
+        '$email',
+        '$password',
+        NOW(),
+        'Active',
+        '$role'
+    )
+    ";
 
-        $stmt->execute([
-            ':fname'    => $fname,
-            ':lname'    => $lname,
-            ':email'    => $email,
-            ':password' => $password,
-            ':role'     => $role
-        ]);
+    $pdo->exec($sql);
 
-        header("Location: admin-roles.php");
-        exit;
-    } catch (PDOException $e) {
-        die("Database Error: " . $e->getMessage());
-    }
+    header("Location: admin-roles.php");
+    exit();
 }
 
 ?>
@@ -62,10 +53,10 @@ if(isset($_POST['create'])) {
                 extend: {
                     colors: {
                         school: {
-                            green: '#0b4222', 
+                            green: '#0b4222', // Deep forest green
                             'green-hover': '#072e17',
-                            gold: '#b8860b', 
-                            yellow: '#f4c430', 
+                            gold: '#b8860b', // Rich gold/amber
+                            yellow: '#f4c430', // Bright logo yellow
                         }
                     }
                 }
@@ -77,6 +68,16 @@ if(isset($_POST['create'])) {
 
     <div class="w-full max-w-md rounded-2xl bg-[#fcfbf7] p-8 shadow-2xl border border-school-gold/20 relative overflow-hidden">
         
+        <a
+                    href ="admin-roles.php"
+                    class="text-s hover:text-gray-400 transition shrink-0">
+                    <- Back to Manage Roles
+        </a>
+
+        <br />
+        <br />
+        <br />
+
         <div class="absolute top-3 right-3 text-school-green/5 text-xl font-sans">❖ ❖</div>
         <div class="absolute bottom-3 left-3 text-school-green/5 text-xl font-sans">❖ ❖</div>
 

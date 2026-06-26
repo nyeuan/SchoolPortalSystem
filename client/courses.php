@@ -1,52 +1,59 @@
 <?php
 $required_role = 'Student';
-include 'session_check.php';
-include 'db.php';
+include 'session_check.php'; //
+include 'db.php'; //
 
-$first_name = htmlspecialchars($_SESSION['first_name']);
-$last_name  = htmlspecialchars($_SESSION['last_name']);
-$initials   = strtoupper(substr($first_name, 0, 1) . substr($last_name, 0, 1));
-$full_name  = $first_name . ' ' . $last_name;
-$student_id = $_SESSION['user_id'];
+$first_name = htmlspecialchars($_SESSION['first_name']); //
+$last_name  = htmlspecialchars($_SESSION['last_name']); //
+$initials   = strtoupper(substr($first_name, 0, 1) . substr($last_name, 0, 1)); //
+$full_name  = $first_name . ' ' . $last_name; //
+$student_id = $_SESSION['user_id']; //
 
 // ── Filter inputs (sanitised) ──────────────────────────────
-$filter_term   = isset($_GET['term'])   ? (int)$_GET['term']   : 0;
-$filter_status = isset($_GET['status']) ? trim($_GET['status']) : '';
+$filter_term   = isset($_GET['term'])   ? (int)$_GET['term']   : 0; //
+$filter_status = isset($_GET['status']) ? trim($_GET['status']) : ''; //
 
 // ── Fetch all Terms for the dropdown ──────────────────────
 try {
-    $terms = $pdo->query("SELECT Term_ID, TermName FROM Term ORDER BY StartDate DESC")->fetchAll();
+    $terms = $pdo->query("SELECT Term_ID, TermName FROM Term ORDER BY StartDate DESC")->fetchAll(); //
 } catch (PDOException $e) {
-    $terms = [];
+    $terms = []; //
 }
 
 // ── Build dynamic WHERE clause ─────────────────────────────
-$where_parts = ["e.FK_User_ID = :student_id", "e.EnrollmentStatus = 'Enrolled'"];
-$params      = [':student_id' => $student_id];
+$where_parts = ["e.FK_User_ID = :student_id", "e.EnrollmentStatus = 'Enrolled'"]; //
+$params      = [':student_id' => $student_id]; //
 
 if ($filter_term > 0) {
-    $where_parts[] = "e.FK_Term_ID = :term_id";
-    $params[':term_id'] = $filter_term;
+    $where_parts[] = "e.FK_Term_ID = :term_id"; //
+    $params[':term_id'] = $filter_term; //
 }
 if ($filter_status !== '') {
-    $where_parts[] = "c.Status = :status";
-    $params[':status'] = $filter_status;
+    $where_parts[] = "c.Status = :status"; //
+    $params[':status'] = $filter_status; //
 }
 
-$where_sql = implode(' AND ', $where_parts);
+$where_sql = implode(' AND ', $where_parts); //
 
 try {
+    // FIXED: Joined SectionCourses, Section, and GradeLevel to capture the full context path
     $stmt = $pdo->prepare("
         SELECT
             c.Course_ID,
             c.CourseCode,
             c.CourseName,
             c.Status,
+            sec.SectionName,
+            gl.GradeName,
             CONCAT(u.FirstName, ' ', u.LastName) AS InstructorName
         FROM Courses c
-        INNER JOIN Enrollment e   ON c.Course_ID = e.FK_Course_ID
+        INNER JOIN Enrollment e         ON c.Course_ID = e.FK_Course_ID
+        INNER JOIN Users stu            ON e.FK_User_ID = stu.User_ID
+        INNER JOIN SectionCourses sc    ON c.Course_ID = sc.FK_Course_ID AND stu.FK_Section_ID = sc.FK_Section_ID
+        LEFT  JOIN Section sec          ON stu.FK_Section_ID = sec.Section_ID
+        LEFT  JOIN GradeLevel gl        ON sec.FK_GradeLevel_ID = gl.GradeLevel_ID
         LEFT  JOIN CourseInstructors ci ON c.Course_ID = ci.FK_Course_ID
-        LEFT  JOIN Users u        ON ci.FK_User_ID = u.User_ID
+        LEFT  JOIN Users u              ON ci.FK_User_ID = u.User_ID
         WHERE $where_sql
         ORDER BY c.CourseCode ASC
     ");
@@ -60,12 +67,12 @@ try {
         INNER JOIN Enrollment e ON c.Course_ID = e.FK_Course_ID
         WHERE e.FK_User_ID = :sid AND e.EnrollmentStatus = 'Enrolled'
         ORDER BY c.Status ASC
-    ");
-    $status_stmt->execute([':sid' => $student_id]);
-    $all_statuses = $status_stmt->fetchAll(PDO::FETCH_COLUMN);
+    "); //
+    $status_stmt->execute([':sid' => $student_id]); //
+    $all_statuses = $status_stmt->fetchAll(PDO::FETCH_COLUMN); //
 
 } catch (PDOException $e) {
-    die("Error retrieving student enrollment records: " . $e->getMessage());
+    die("Error retrieving student enrollment records: " . $e->getMessage()); //
 }
 ?>
 <!DOCTYPE html>
@@ -95,60 +102,16 @@ try {
 </head>
 
 <body class="bg-gradient-to-br from-school-green via-[#125730] to-school-yellow min-h-screen font-serif text-gray-800 flex flex-col md:flex-row">
+    <?php include 'sidebar.php'; ?>
 
-    <aside class="w-full md:w-64 bg-[#fcfbf7] border-b md:border-b-0 md:border-r border-school-gold/20 flex flex-col justify-between p-6 shrink-0 shadow-xl md:min-h-screen">
-        <div>
-            <div class="flex items-center space-x-3 mb-8 pb-4 border-b border-gray-200">
-                <img src="stiveslogo.png" alt="St. Ives School Logo" class="h-12 w-12 object-contain drop-shadow-sm">
-                <div>
-                    <h2 class="font-bold text-school-green tracking-wide leading-tight">St. Ives School</h2>
-                    <p class="text-xs text-gray-500 italic">Wisdom & Charity</p>
-                </div>
-            </div>
-            <nav class="space-y-2">
-                <a href="homepage.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
-                    <span class="text-xl">🏛️</span><span>Institution Home</span>
-                </a>
-                <a href="announcements.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
-                    <span>📢</span> <span>Announcements</span>
-                </a>
-                <a href="courses.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl bg-school-green text-white font-semibold transition shadow-md">
-                    <span class="text-xl opacity-70">📚</span><span>Courses</span>
-                </a>
-                <a href="activities.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
-                    <span class="text-xl opacity-70 group-hover:opacity-100">🏆</span><span>Activities</span>
-                </a>
-                <a href="grades.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
-                    <span class="text-xl opacity-70 group-hover:opacity-100">📊</span><span>Grades</span>
-                </a>
-                <a href="Account-info.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
-                    <span class="text-xl opacity-70 group-hover:opacity-100">👤</span><span>Account</span>
-                </a>
-            </nav>
-        </div>
-        <div class="mt-8 pt-4 border-t border-gray-200 flex items-center justify-between">
-            <div class="flex items-center space-x-3">
-                <div class="w-9 h-9 rounded-full bg-school-gold text-white flex items-center justify-center font-bold font-sans text-sm shadow-sm"><?= $initials ?></div>
-                <div>
-                    <h4 class="text-sm font-bold text-school-green leading-tight"><?= $full_name ?></h4>
-                    <p class="text-xs text-gray-500">Student Account</p>
-                </div>
-            </div>
-            <a href="logout.php" title="Log Out" class="text-gray-400 hover:text-red-600 transition p-1 text-lg">🚪</a>
-        </div>
-    </aside>
-
-    <main class="flex-1 p-4 sm:p-8 overflow-y-auto max-w-7xl mx-auto w-full">
+    <main class="ml-0 md:ml-64 flex-1 p-4 sm:p-8 min-h-screen w-full">
 
         <section class="bg-[#fcfbf7] rounded-2xl p-6 shadow-lg border border-school-gold/20 mb-6">
-            <h1 class="text-3xl font-bold tracking-wide text-school-green">Courses</h1>
+            <h1 class="text-3xl font-bold tracking-wide text-school-green">My Courses</h1>
         </section>
 
-        <!-- ── Search & Filter bar ─────────────────────────── -->
         <section class="bg-[#fcfbf7] rounded-2xl p-5 shadow-lg border border-school-gold/20 mb-6">
             <form method="GET" action="courses.php" class="grid grid-cols-1 lg:grid-cols-4 gap-4" id="filterForm">
-
-                <!-- Live search (client-side) -->
                 <input
                     type="text"
                     id="searchInput"
@@ -156,7 +119,6 @@ try {
                     value="<?= htmlspecialchars($_GET['q'] ?? '') ?>"
                     class="lg:col-span-2 border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-school-green font-sans text-sm">
 
-                <!-- Term filter (server-side) -->
                 <select name="term" onchange="this.form.submit()"
                     class="border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-school-green font-sans text-sm">
                     <option value="0">All Terms</option>
@@ -167,7 +129,6 @@ try {
                     <?php endforeach; ?>
                 </select>
 
-                <!-- Course status filter (server-side) -->
                 <select name="status" onchange="this.form.submit()"
                     class="border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-school-green font-sans text-sm">
                     <option value="">All Courses</option>
@@ -177,11 +138,9 @@ try {
                         </option>
                     <?php endforeach; ?>
                 </select>
-
             </form>
         </section>
 
-        <!-- ── Course grid ──────────────────────────────────── -->
         <section>
             <div id="courseGrid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
                 <?php if (empty($enrolled_courses)): ?>
@@ -191,11 +150,16 @@ try {
                 <?php else: ?>
                     <?php foreach ($enrolled_courses as $course): ?>
                         <a href="view-course.php?course_id=<?= $course['Course_ID'] ?>"
-                           data-search="<?= strtolower(htmlspecialchars($course['CourseCode'] . ' ' . $course['CourseName'] . ' ' . ($course['InstructorName'] ?? ''))) ?>"
+                           data-search="<?= strtolower(htmlspecialchars($course['CourseCode'] . ' ' . $course['CourseName'] . ' ' . ($course['InstructorName'] ?? '') . ' ' . ($course['GradeName'] ?? '') . ' ' . ($course['SectionName'] ?? ''))) ?>"
                            class="course-card group block bg-[#fcfbf7] rounded-2xl shadow-lg border border-school-gold/20 overflow-hidden hover:shadow-xl transition flex flex-col justify-between">
                             <div>
-                                <div class="w-full h-36 bg-school-green/10 flex items-center justify-center text-school-green font-bold text-lg tracking-wider border-b border-school-gold/10 font-sans group-hover:bg-school-green/15 transition">
-                                    <?= htmlspecialchars($course['CourseCode']) ?>
+                                <div class="w-full h-36 bg-school-green/10 flex flex-col items-center justify-center text-school-green border-b border-school-gold/10 font-sans group-hover:bg-school-green/15 transition px-4 text-center">
+                                    <span class="font-bold text-lg tracking-wider"><?= htmlspecialchars($course['CourseCode']) ?></span>
+                                    <?php if (!empty($course['SectionName'])): ?>
+                                        <span class="text-[11px] bg-school-green text-white px-2.5 py-0.5 rounded-md mt-2 font-semibold shadow-sm">
+                                            <?= htmlspecialchars($course['GradeName'] ?? 'Academic') ?> — <?= htmlspecialchars($course['SectionName']) ?>
+                                        </span>
+                                    <?php endif; ?>
                                 </div>
                                 <div class="p-4">
                                     <p class="text-xs uppercase tracking-wide text-gray-400 font-sans"><?= htmlspecialchars($course['CourseCode']) ?></p>
@@ -219,12 +183,10 @@ try {
                 <?php endif; ?>
             </div>
 
-            <!-- Shown when live search yields no results -->
             <div id="noResults" class="hidden col-span-full bg-[#fcfbf7] rounded-2xl p-8 text-center shadow border border-school-gold/20 mt-0">
                 <p class="text-gray-500 italic font-sans">No courses match your search.</p>
             </div>
         </section>
-
     </main>
 
     <script>
@@ -235,7 +197,6 @@ try {
         let currentPage   = 1;
         let filteredCards = [...allCards];
 
-        // ── Pagination container ───────────────────────────
         const paginationEl = document.createElement('div');
         paginationEl.id = 'pagination';
         paginationEl.className = 'flex items-center justify-center gap-2 mt-6 flex-wrap';
@@ -251,14 +212,11 @@ try {
             const start = (currentPage - 1) * PER_PAGE;
             const end   = start + PER_PAGE;
 
-            // Show/hide cards
             allCards.forEach(card => card.style.display = 'none');
             filteredCards.slice(start, end).forEach(card => card.style.display = '');
 
-            // No results message
             noResults.classList.toggle('hidden', total > 0);
 
-            // Build pagination controls
             paginationEl.innerHTML = '';
             if (totalPages <= 1) return;
 
@@ -267,7 +225,6 @@ try {
             const btnInactive = btnBase + 'bg-[#fcfbf7] text-school-green border border-school-gold/30 hover:bg-school-green/10';
             const btnDisabled = btnBase + 'bg-gray-100 text-gray-400 cursor-not-allowed';
 
-            // Prev
             const prev = document.createElement('button');
             prev.textContent = '← Prev';
             prev.className = currentPage === 1 ? btnDisabled : btnInactive;
@@ -275,7 +232,6 @@ try {
             prev.onclick = () => { currentPage--; renderPage(); scrollToGrid(); };
             paginationEl.appendChild(prev);
 
-            // Page numbers (show up to 5 around current)
             const pageNums = getPageRange(currentPage, totalPages);
             pageNums.forEach(p => {
                 if (p === '...') {
@@ -292,7 +248,6 @@ try {
                 paginationEl.appendChild(btn);
             });
 
-            // Next
             const next = document.createElement('button');
             next.textContent = 'Next →';
             next.className = currentPage === totalPages ? btnDisabled : btnInactive;
@@ -300,7 +255,6 @@ try {
             next.onclick = () => { currentPage++; renderPage(); scrollToGrid(); };
             paginationEl.appendChild(next);
 
-            // Count label
             const label = document.createElement('p');
             const showing_start = total === 0 ? 0 : start + 1;
             const showing_end   = Math.min(end, total);
@@ -320,7 +274,6 @@ try {
             document.getElementById('courseGrid').scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
 
-        // ── Search handler ─────────────────────────────────
         searchInput.addEventListener('input', function () {
             const q = this.value.toLowerCase().trim();
             applySearch(q);
@@ -328,7 +281,6 @@ try {
             renderPage();
         });
 
-        // Initial render
         renderPage();
     </script>
 </body>

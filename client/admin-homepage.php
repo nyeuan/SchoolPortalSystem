@@ -214,7 +214,7 @@ try {
             <div class="lg:col-span-2 space-y-6">
                 
                 <section class="bg-[#fcfbf7] rounded-2xl p-6 shadow-lg border border-school-gold/20">
-                    <h3 class="text-xl font-bold text-school-green border-b border-gray-100 pb-3 mb-4">📢 Institutional Announcements </h3>
+                    <h3 class="text-xl font-bold text-school-green border-b border-gray-100 pb-3 mb-4"> Institutional Announcements </h3>
                     
                     <?php if (empty($admin_announcements)): ?>
                         <p class="text-sm text-gray-400 italic">No historical admin announcements found.</p>
@@ -232,14 +232,11 @@ try {
                                 <?php endif; ?>
 
                                 <div class="p-3 rounded-xl border bg-amber-50/60 border-amber-200 relative">
-                                    <span class="absolute top-3 right-3 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-red-600 text-white">
-                                        🚨 Admin
+                                    <span class="absolute top-3 right-3 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-green-800 text-white">
+                                        <?= date('M d, Y @ h:i A', strtotime($announcement['PostDate'])) ?>
                                     </span>
                                     <h4 class="font-bold text-school-green text-sm pr-24"><?= htmlspecialchars($announcement['Title']) ?></h4>
                                     <p class="text-xs text-gray-600 mt-1"><?= htmlspecialchars($announcement['Message']) ?></p>
-                                    <span class="text-[10px] text-gray-400 block mt-2">
-                                        📅 <?= date('M d, Y @ h:i A', strtotime($announcement['PostDate'])) ?>
-                                    </span>
                                 </div>
 
                             <?php 
@@ -288,11 +285,11 @@ try {
 
             <div class="space-y-6">
                 <section class="bg-[#fcfbf7] rounded-2xl p-6 shadow-lg border border-school-gold/20">
-                    <h3 class="text-lg font-bold text-school-green border-b border-gray-100 pb-2 mb-3">⚡ Quick Actions</h3>
+                    <h3 class="text-lg font-bold text-school-green border-b border-gray-100 pb-2 mb-3">Create Announcement</h3>
                     
                     <button onclick="document.getElementById('broadcastModal').classList.remove('hidden')"
-                            class="w-full text-center p-3 bg-red-700 text-white rounded-xl hover:bg-red-800 transition text-sm font-semibold shadow-sm animate-pulse">
-                        🚨 Broadcast Admin Card
+                            class="w-full text-center p-3 bg-green-700 text-white rounded-xl hover:bg-green-800 transition text-sm font-semibold shadow-sm">
+                        Broadcast Institutional Announcement
                     </button>
                 </section>
 
@@ -309,7 +306,7 @@ try {
 
     <div id="broadcastModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
         <div class="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl font-sans">
-            <h3 class="text-xl font-bold text-red-700 mb-1">🚨 Broadcast Admin Notice</h3>
+            <h3 class="text-xl font-bold text-green-800 mb-1">Create Announcement</h3>
             <p class="text-xs text-gray-400 mb-4 italic">This injects a critical notification card into all Student and Professor homepages.</p>
             
             <form action="admin-homepage.php" method="POST">
@@ -320,7 +317,7 @@ try {
                     class="w-full border border-gray-300 rounded-xl px-4 py-2 mb-4 focus:outline-none focus:ring-2 focus:ring-red-700"
                     placeholder="e.g., Campus Maintenance Notification">
 
-                <label class="block text-sm font-semibold text-gray-600 mb-1">Message Body Broadcast Content</label>
+                <label class="block text-sm font-semibold text-gray-600 mb-1">Announcement Content</label>
                 <textarea name="message" required rows="4" maxlength="1000"
                     class="w-full border border-gray-300 rounded-xl px-4 py-2 mb-6 focus:outline-none focus:ring-2 focus:ring-red-700"
                     placeholder="Type the message notice details here..."></textarea>
@@ -328,8 +325,8 @@ try {
                 <div class="flex justify-end gap-3">
                     <button type="button" onclick="document.getElementById('broadcastModal').classList.add('hidden')"
                         class="px-4 py-2 rounded-xl text-gray-500 hover:bg-gray-100 transition">Cancel</button>
-                    <button type="submit" class="bg-red-700 text-white px-5 py-2 rounded-xl font-semibold hover:bg-red-800 transition">
-                        Dispatch to Portals
+                    <button type="submit" class="bg-green-700 text-white px-5 py-2 rounded-xl font-semibold hover:bg-green-800 transition">
+                        Post Announcement
                     </button>
                 </div>
             </form>

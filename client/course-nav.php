@@ -24,7 +24,7 @@ $nav_tabs = [
     'roster'        => ['label' => 'Roster',        'icon' => '👥', 'url' => "course-roster.php?course_id=$course_id"],
 ];
 ?>
-<nav class="bg-[#fcfbf7] rounded-2xl shadow-lg border border-school-gold/20 mb-6 px-3 py-2 flex gap-2 font-sans overflow-x-auto">
+<nav class="bg-[#fcfbf7] rounded-2xl shadow-lg border border-school-gold/20 mb-6 px-3 py-2 flex justify-start md:justify-center gap-4 font-sans overflow-x-auto">
     <?php foreach ($nav_tabs as $nav_key => $nav_tab): ?>
         <?php $nav_active = ($active === $nav_key); ?>
         <a href="<?= htmlspecialchars($nav_tab['url']) ?>"

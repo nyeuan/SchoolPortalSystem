@@ -1,28 +1,35 @@
 <?php
 $required_role = 'Professor';
-include 'session_check.php';
-include 'db.php';
+include 'session_check.php'; //
+include 'db.php'; //
 
-$first_name = htmlspecialchars($_SESSION['first_name']);
-$last_name  = htmlspecialchars($_SESSION['last_name']);
-$initials   = strtoupper(substr($first_name, 0, 1) . substr($last_name, 0, 1));
-$full_name  = $first_name . ' ' . $last_name;
+$first_name = htmlspecialchars($_SESSION['first_name']); //
+$last_name  = htmlspecialchars($_SESSION['last_name']); //
+$initials   = strtoupper(substr($first_name, 0, 1) . substr($last_name, 0, 1)); //
+$full_name  = $first_name . ' ' . $last_name; //
 
-$course_id = filter_input(INPUT_GET, 'course_id', FILTER_VALIDATE_INT);
+$course_id = filter_input(INPUT_GET, 'course_id', FILTER_VALIDATE_INT); //
 
 if (!$course_id) {
-    header('Location: prof-courses.php');
+    header('Location: prof-courses.php'); //
     exit;
 }
 
 try {
-    // Course header info
-    $course_stmt = $pdo->prepare("SELECT Course_ID, CourseCode, CourseName, Status FROM Courses WHERE Course_ID = :course_id");
-    $course_stmt->execute([':course_id' => $course_id]);
-    $course = $course_stmt->fetch();
+    // FIXED: Joined GradeLevel inside management core details extractors
+    $course_stmt = $pdo->prepare("
+        SELECT c.Course_ID, c.CourseCode, c.CourseName, c.Status, sec.SectionName, gl.GradeName
+        FROM Courses c
+        LEFT JOIN SectionCourses sc ON c.Course_ID = sc.FK_Course_ID
+        LEFT JOIN Section sec       ON sc.FK_Section_ID = sec.Section_ID
+        LEFT JOIN GradeLevel gl     ON sec.FK_GradeLevel_ID = gl.GradeLevel_ID
+        WHERE c.Course_ID = :course_id
+    ");
+    $course_stmt->execute([':course_id' => $course_id]); //
+    $course = $course_stmt->fetch(); //
 
     if (!$course) {
-        header('Location: prof-courses.php?error=course_not_found');
+        header('Location: prof-courses.php?error=course_not_found'); //
         exit;
     }
 
@@ -32,27 +39,26 @@ try {
         FROM CourseModule
         WHERE FK_Course_ID = :course_id
         ORDER BY ModuleSequence ASC
-    ");
-    $modules_stmt->execute([':course_id' => $course_id]);
-    $modules = $modules_stmt->fetchAll();
+    "); //
+    $modules_stmt->execute([':course_id' => $course_id]); //
+    $modules = $modules_stmt->fetchAll(); //
 
-    // Learning materials and assignments, grouped by module
-    $materials_by_module   = [];
-    $assignments_by_module = [];
+    $materials_by_module   = []; //
+    $assignments_by_module = []; //
 
     if (!empty($modules)) {
-        $module_ids = array_column($modules, 'CourseModule_ID');
-        $placeholders = implode(',', array_fill(0, count($module_ids), '?'));
+        $module_ids = array_column($modules, 'CourseModule_ID'); //
+        $placeholders = implode(',', array_fill(0, count($module_ids), '?')); //
 
         $materials_stmt = $pdo->prepare("
             SELECT Material_ID, MaterialName, FileName, FilePath, FileType, UploadDate, FK_CourseModule_ID
             FROM LearningMaterial
             WHERE FK_CourseModule_ID IN ($placeholders)
             ORDER BY UploadDate DESC
-        ");
-        $materials_stmt->execute($module_ids);
+        "); //
+        $materials_stmt->execute($module_ids); //
         foreach ($materials_stmt->fetchAll() as $material) {
-            $materials_by_module[$material['FK_CourseModule_ID']][] = $material;
+            $materials_by_module[$material['FK_CourseModule_ID']][] = $material; //
         }
 
         $assignments_stmt = $pdo->prepare("
@@ -63,35 +69,34 @@ try {
             FROM Assignments a
             WHERE a.FK_CourseModule_ID IN ($placeholders)
             ORDER BY a.DueDate ASC
-        ");
-        $assignments_stmt->execute($module_ids);
+        "); //
+        $assignments_stmt->execute($module_ids); //
         foreach ($assignments_stmt->fetchAll() as $assignment) {
-            $assignments_by_module[$assignment['FK_CourseModule_ID']][] = $assignment;
+            $assignments_by_module[$assignment['FK_CourseModule_ID']][] = $assignment; //
         }
     }
 
 } catch (PDOException $e) {
-    die("Database Error: " . $e->getMessage());
+    die("Database Error: " . $e->getMessage()); //
 }
 
-// Simple banners driven by redirect query params from the action handlers
 $success_messages = [
-    'module_added'        => 'Module added successfully.',
-    'material_added'      => 'Learning material uploaded successfully.',
-    'assignment_added'    => 'Assignment created successfully.',
-    'assignment_updated'  => 'Assignment updated successfully.',
-    'assignment_deleted'  => 'Assignment deleted successfully.',
+    'module_added'        => 'Module added successfully.', //
+    'material_added'      => 'Learning material uploaded successfully.', //
+    'assignment_added'    => 'Assignment created successfully.', //
+    'assignment_updated'  => 'Assignment updated successfully.', //
+    'assignment_deleted'  => 'Assignment deleted successfully.', //
 ];
 $error_messages = [
-    'missing_fields'    => 'Please fill in all required fields.',
-    'upload_failed'     => 'The file upload failed. Please try again.',
-    'invalid_file_type' => 'That file type is not allowed.',
-    'not_authorized'    => 'You are not authorized to modify that assignment.',
+    'missing_fields'    => 'Please fill in all required fields.', //
+    'upload_failed'     => 'The file upload failed. Please try again.', //
+    'invalid_file_type' => 'That file type is not allowed.', //
+    'not_authorized'    => 'You are not authorized to modify that assignment.', //
 ];
-$success_msg = $success_messages[$_GET['success'] ?? ''] ?? null;
-$error_msg   = $error_messages[$_GET['error'] ?? ''] ?? null;
+$success_msg = $success_messages[$_GET['success'] ?? ''] ?? null; //
+$error_msg   = $error_messages[$_GET['error'] ?? ''] ?? null; //
 
-$active = 'content';
+$active = 'content'; //
 ?>
 
 <!DOCTYPE html>
@@ -100,9 +105,7 @@ $active = 'content';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>St. Ives School - Manage Course</title>
-
     <script src="https://cdn.tailwindcss.com"></script>
-
     <script>
         tailwind.config = {
             theme: {
@@ -123,84 +126,9 @@ $active = 'content';
 </head>
 
 <body class="bg-gradient-to-br from-school-green via-[#125730] to-school-yellow min-h-screen font-serif text-gray-800 flex flex-col md:flex-row">
+    <?php include 'sidebar.php'; ?>
 
-    <!-- sidebar -->
-    <aside class="w-full md:w-64 bg-[#fcfbf7] border-b md:border-b-0 md:border-r border-school-gold/20 flex flex-col justify-between p-6 shrink-0 shadow-xl md:min-h-screen">
-
-        <div>
-
-            <div class="flex items-center space-x-3 mb-8 pb-4 border-b border-gray-200">
-
-                <img src="stiveslogo.png"
-                    alt="St. Ives School Logo"
-                    class="h-12 w-12 object-contain drop-shadow-sm">
-
-                <div>
-                    <h2 class="font-bold text-school-green tracking-wide leading-tight">
-                        St. Ives School
-                    </h2>
-
-                    <p class="text-xs text-gray-500 italic">
-                        Wisdom & Charity
-                    </p>
-                </div>
-
-            </div>
-
-            <nav class="space-y-2">
-
-                <a href="prof-homepage.php"
-                    class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold">
-                    <span>🏛️</span>
-                    <span>Institution Home</span>
-                </a>
-
-                <a href="prof-courses.php"
-                    class="flex items-center space-x-3 px-4 py-3 rounded-xl bg-school-green text-white font-semibold">
-                    <span>📚</span>
-                    <span>Courses</span>
-                </a>
-
-                <a href="Account-info.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
-                    <span class="text-xl opacity-70 group-hover:opacity-100">👤</span>
-                    <span>Account</span>
-                </a>
-
-            </nav>
-
-        </div>
-
-        <div class="mt-8 pt-4 border-t border-gray-200 flex items-center justify-between">
-
-            <div class="flex items-center space-x-3">
-
-                <div class="w-9 h-9 rounded-full bg-school-gold text-white flex items-center justify-center font-bold text-sm">
-                    <?= $initials ?>
-                </div>
-
-                <div>
-                    <h4 class="text-sm font-bold text-school-green">
-                        <?= $full_name ?>
-                    </h4>
-
-                    <p class="text-xs text-gray-500">
-                        Professor Account
-                    </p>
-                </div>
-
-            </div>
-
-            <a href="logout.php"
-                class="text-gray-400 hover:text-red-600 transition p-1 text-lg">
-                🚪
-            </a>
-
-        </div>
-
-    </aside>
-
-    <!-- main content -->
-    <main class="flex-1 p-4 sm:p-8 overflow-y-auto max-w-6xl mx-auto w-full">
+    <main class="ml-0 md:ml-64 flex-1 p-4 sm:p-8 min-h-screen w-full">
         <a href="prof-courses.php" class="inline-flex items-center text-sm text-white/90 hover:text-white mb-4 font-sans font-medium">
             ← Back to Courses
         </a>
@@ -217,18 +145,19 @@ $active = 'content';
             </div>
         <?php endif; ?>
 
-        <!-- course header -->
         <section class="bg-[#fcfbf7] rounded-3xl p-6 shadow-lg border border-school-gold/20 mb-6">
-
             <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-
                 <div>
-                    <h1 class="text-4xl font-bold text-school-green">
-                        <?= htmlspecialchars($course['CourseCode']) ?> — <?= htmlspecialchars($course['CourseName']) ?>
+                    <h1 class="text-4xl font-bold text-school-green flex items-center flex-wrap gap-2">
+                        <span><?= htmlspecialchars($course['CourseCode']) ?> — <?= htmlspecialchars($course['CourseName']) ?></span>
+                        <?php if (!empty($course['SectionName'])): ?>
+                            <span class="text-xs bg-school-gold text-white px-2.5 py-1 rounded-full font-sans font-bold uppercase tracking-wider shadow-sm">
+                                <?= htmlspecialchars($course['GradeName'] ?? 'Academic') ?> — <?= htmlspecialchars($course['SectionName']) ?>
+                            </span>
+                        <?php endif; ?>
                     </h1>
-
                     <p class="text-gray-500 italic mt-2">
-                        Professor Course Management
+                        Course Management
                     </p>
                 </div>
 
@@ -237,76 +166,53 @@ $active = 'content';
                     class="bg-school-green text-white px-6 py-3 rounded-2xl font-semibold hover:bg-school-green-hover transition shrink-0">
                     + Add Module
                 </button>
-
             </div>
-
         </section>
 
         <?php include 'course-nav.php'; ?>
 
-        <!-- modules -->
         <?php if (empty($modules)): ?>
-
             <div class="bg-[#fcfbf7] rounded-3xl p-10 text-center shadow-lg border border-school-gold/20 mb-6">
                 <p class="text-gray-500 italic">No modules have been created for this course yet. Use "+ Add Module" to get started.</p>
             </div>
-
         <?php else: ?>
-
             <?php foreach ($modules as $index => $module): ?>
                 <?php
                     $mod_id = $module['CourseModule_ID'];
                     $mod_materials   = $materials_by_module[$mod_id] ?? [];
                     $mod_assignments = $assignments_by_module[$mod_id] ?? [];
                 ?>
-
                 <details <?= $index === 0 ? 'open' : '' ?> class="bg-[#fcfbf7] rounded-3xl shadow-lg border border-school-gold/20 mb-6">
-
                     <summary class="list-none cursor-pointer">
-
                         <div class="p-6 flex justify-between items-center">
-
                             <h2 class="text-2xl font-bold text-school-green">
                                 📁 <?= htmlspecialchars($module['ModuleName']) ?>
                             </h2>
-
                             <div class="space-x-3">
                                 <span class="text-xs text-gray-400 font-sans">Sequence <?= (int)$module['ModuleSequence'] ?></span>
                             </div>
-
                         </div>
-
                     </summary>
 
                     <div class="px-6 pb-6">
-
-                        <!-- Learning Materials -->
                         <div class="bg-gray-50 rounded-2xl border p-5 mb-4">
-
                             <div class="flex justify-between items-center mb-4">
-
                                 <h3 class="text-xl font-bold text-school-green">
                                     📚 Learning Materials
                                 </h3>
-
                                 <button
                                     onclick="openMaterialModal(<?= $mod_id ?>)"
                                     class="bg-school-green text-white px-4 py-2 rounded-xl">
                                     + Upload Material
                                 </button>
-
                             </div>
 
                             <?php if (empty($mod_materials)): ?>
-
                                 <p class="text-sm text-gray-400 italic font-sans">No learning materials uploaded for this module yet.</p>
-
                             <?php else: ?>
-
                                 <div class="space-y-2">
                                     <?php foreach ($mod_materials as $material): ?>
                                         <div class="flex justify-between items-center border rounded-xl p-4 bg-white">
-
                                             <div class="font-sans">
                                                 <a href="<?= htmlspecialchars($material['FilePath']) ?>" target="_blank"
                                                    class="font-semibold text-school-green hover:underline">
@@ -316,50 +222,36 @@ $active = 'content';
                                                     <?= htmlspecialchars(strtoupper($material['FileType'])) ?> · Uploaded <?= date('M d, Y', strtotime($material['UploadDate'])) ?>
                                                 </p>
                                             </div>
-
                                             <div>
                                                 <a href="<?= htmlspecialchars($material['FilePath']) ?>" target="_blank" class="text-blue-600 font-semibold mr-4 font-sans text-sm">
                                                     View
                                                 </a>
                                             </div>
-
                                         </div>
                                     <?php endforeach; ?>
                                 </div>
-
                             <?php endif; ?>
-
                         </div>
 
-                        <!-- assignments -->
                         <div class="bg-gray-50 rounded-2xl border p-5">
-
                             <div class="flex justify-between items-center mb-4">
-
                                 <h3 class="text-xl font-bold text-school-green">
                                     📝 Assignments
                                 </h3>
-
                                 <button
                                     onclick="openAssignmentModal(<?= $mod_id ?>)"
                                     class="bg-school-green text-white px-4 py-2 rounded-xl">
                                     + Create Assignment
                                 </button>
-
                             </div>
 
                             <?php if (empty($mod_assignments)): ?>
-
                                 <p class="text-sm text-gray-400 italic font-sans">No assignments created for this module yet.</p>
-
                             <?php else: ?>
-
                                 <div class="space-y-2">
                                     <?php foreach ($mod_assignments as $assignment): ?>
                                         <div class="border rounded-xl p-4 bg-white">
-
                                             <div class="flex justify-between items-start gap-4 font-sans">
-
                                                 <div class="min-w-0">
                                                     <p class="font-semibold text-school-green">
                                                         📝 <?= htmlspecialchars($assignment['Title']) ?>
@@ -378,7 +270,6 @@ $active = 'content';
                                                         </a>
                                                     <?php endif; ?>
                                                 </div>
-
                                             </div>
 
                                             <div class="flex flex-wrap gap-2 mt-3 border-t pt-3 font-sans">
@@ -407,27 +298,17 @@ $active = 'content';
                                                     </button>
                                                 </form>
                                             </div>
-
                                         </div>
                                     <?php endforeach; ?>
                                 </div>
-
                             <?php endif; ?>
-
                         </div>
-
                     </div>
-
                 </details>
-
             <?php endforeach; ?>
-
         <?php endif; ?>
-
-
     </main>
 
-    <!-- Add Module Modal -->
     <div id="addModuleModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
         <div class="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl font-sans">
             <h3 class="text-xl font-bold text-school-green mb-4">Add Module</h3>
@@ -449,7 +330,6 @@ $active = 'content';
         </div>
     </div>
 
-    <!-- Upload Material Modal -->
     <div id="addMaterialModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
         <div class="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl font-sans">
             <h3 class="text-xl font-bold text-school-green mb-4">Upload Learning Material</h3>
@@ -476,7 +356,6 @@ $active = 'content';
         </div>
     </div>
 
-    <!-- Create Assignment Modal -->
     <div id="addAssignmentModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
         <div class="bg-white rounded-2xl p-6 w-full max-w-lg shadow-xl font-sans max-h-[90vh] overflow-y-auto">
             <h3 class="text-xl font-bold text-school-green mb-4">Create Assignment</h3>
@@ -522,7 +401,6 @@ $active = 'content';
         </div>
     </div>
 
-    <!-- Edit Assignment Modal -->
     <div id="editAssignmentModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
         <div class="bg-white rounded-2xl p-6 w-full max-w-lg shadow-xl font-sans max-h-[90vh] overflow-y-auto">
             <h3 class="text-xl font-bold text-school-green mb-4">Edit Assignment</h3>
@@ -593,6 +471,5 @@ $active = 'content';
             document.getElementById('editAssignmentModal').classList.remove('hidden');
         }
     </script>
-
 </body>
 </html>

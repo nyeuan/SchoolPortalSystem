@@ -51,6 +51,18 @@ try {
         }
     }
 
+    // 3. Extract the latest critical Global Administration announcement notice
+    $admin_ann_stmt = $pdo->prepare("
+        SELECT a.Title, a.Message, a.PostDate 
+        FROM Announcements a
+        INNER JOIN Courses c ON a.FK_Course_ID = c.Course_ID
+        WHERE c.CourseCode = 'ADMIN'
+        ORDER BY a.PostDate DESC 
+        LIMIT 1
+    ");
+    $admin_ann_stmt->execute();
+    $admin_notice = $admin_ann_stmt->fetch();
+
 } catch (PDOException $e) {
     die("Error processing dashboard metrics: " . $e->getMessage());
 }
@@ -97,43 +109,10 @@ try {
 </head>
 <body class="bg-gradient-to-br from-school-green via-[#125730] to-school-yellow min-h-screen font-serif text-gray-800 flex flex-col md:flex-row">
 
-    <aside class="w-full md:w-64 bg-[#fcfbf7] border-b md:border-b-0 md:border-r border-school-gold/20 flex flex-col justify-between p-6 shrink-0 shadow-xl md:min-h-screen">
-        <div>
-            <div class="flex items-center space-x-3 mb-8 pb-4 border-b border-gray-200">
-                <img src="stiveslogo.png" alt="St. Ives School Logo" class="h-12 w-12 object-contain drop-shadow-sm">
-                <div>
-                    <h2 class="font-bold text-school-green tracking-wide leading-tight">St. Ives School</h2>
-                    <p class="text-xs text-gray-500 italic">Wisdom & Charity</p>
-                </div>
-            </div>
+    <?php include 'sidebar.php'; ?>
 
-            <nav class="space-y-2">
-                <a href="prof-homepage.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl transition font-semibold <?= $active === 'home' ? 'bg-school-green text-white shadow-md' : 'text-school-green hover:bg-school-green hover:text-white' ?>">
-                    <span>🏛️</span> <span>Institution Home</span>
-                </a>
-                </a>
-                <a href="prof-courses.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl transition font-semibold <?= $active === 'courses' ? 'bg-school-green text-white shadow-md' : 'text-school-green hover:bg-school-green hover:text-white' ?>">
-                    <span>📚</span> <span>Courses</span>
-                </a>
-                <a href="Account-info.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl transition font-semibold <?= $active === 'account' ? 'bg-school-green text-white shadow-md' : 'text-school-green hover:bg-school-green hover:text-white' ?>">
-                    <span>👤</span> <span>Account</span>
-                </a>
-            </nav>
-        </div>
-
-        <div class="mt-8 pt-4 border-t border-gray-200 flex items-center justify-between">
-            <div class="flex items-center space-x-3">
-                <div class="w-9 h-9 rounded-full bg-school-gold text-white flex items-center justify-center font-bold font-sans text-sm shadow-sm"><?= $initials ?></div>
-                <div>
-                    <h4 class="text-sm font-bold text-school-green leading-tight"><?= $full_name ?></h4>
-                    <p class="text-xs text-gray-500">Professor Account</p>
-                </div>
-            </div>
-            <a href="logout.php" class="text-gray-400 hover:text-red-600 transition p-1 text-lg">🚪</a>
-        </div>
-    </aside>
-
-    <main class="flex-1 p-4 sm:p-8 overflow-y-auto max-w-7xl mx-auto w-full">
+    <main class="ml-0 md:ml-64 flex-1 p-4 sm:p-8 min-h-screen w-full">
+        
         <header class="bg-[#fcfbf7] rounded-2xl p-6 sm:p-8 shadow-lg border border-school-gold/20 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
                 <h1 class="text-3xl font-bold tracking-wide text-school-green">Welcome back, <?= $first_name ?>!</h1>
@@ -149,21 +128,21 @@ try {
                     <div class="bg-[#fcfbf7] p-6 rounded-2xl shadow-md border border-school-gold/10 flex items-center space-x-4">
                         <div class="p-4 bg-school-green/10 rounded-xl text-2xl">📚</div>
                         <div>
-                            <h4 class="text-xs font-sans uppercase text-gray-400 tracking-wider font-semibold">Assigned Courses Taught</h4>
+                            <h4 class="text-xs font-sans uppercase text-gray-400 tracking-wider font-semibold">Assigned Courses</h4>
                             <p class="text-3xl font-bold text-school-green mt-1 font-sans"><?= (int)$course_count ?></p>
                         </div>
                     </div>
                     <div class="bg-[#fcfbf7] p-6 rounded-2xl shadow-md border border-school-gold/10 flex items-center space-x-4">
                         <div class="p-4 bg-school-gold/10 rounded-xl text-2xl">✍️</div>
                         <div>
-                            <h4 class="text-xs font-sans uppercase text-gray-400 tracking-wider font-semibold">Submissions To Grade</h4>
+                            <h4 class="text-xs font-sans uppercase text-gray-400 tracking-wider font-semibold">Pending Submissions</h4>
                             <p class="text-3xl font-bold text-school-green mt-1 font-sans"><?= (int)$ungraded_submissions_count ?></p>
                         </div>
                     </div>
                 </div>
 
                 <section class="bg-[#fcfbf7] rounded-2xl p-6 shadow-lg border border-school-gold/20">
-                    <h3 class="text-xl font-bold text-school-green border-b border-gray-100 pb-3 mb-4">📢 Institutional Announcements</h3>
+                    <h3 class="text-xl font-bold text-school-green border-b border-gray-100 pb-3 mb-4">Institutional Announcements</h3>
                     
                     <?php if (empty($admin_announcements)): ?>
                         <p class="text-sm text-gray-400 italic">No global system administrative notices issued at this time.</p>
@@ -213,7 +192,7 @@ try {
 
             <div class="space-y-6">
                 <section class="bg-[#fcfbf7] rounded-2xl p-6 shadow-lg border border-school-gold/20">
-                    <h3 class="text-lg font-bold text-school-green border-b border-gray-100 pb-2 mb-3">⚡ Quick Portal Access</h3>
+                    <h3 class="text-lg font-bold text-school-green border-b border-gray-100 pb-2 mb-3">Quick Portal Access</h3>
                     <div class="grid grid-cols-1 gap-2.5 font-sans">
                         <a href="prof-courses.php" class="p-3 bg-gray-50 rounded-xl hover:bg-school-green/5 border border-gray-200 transition flex justify-between items-center text-sm font-medium"><span>Manage Assigned Courses</span><span class="text-school-green">→</span></a>
                         <a href="Account-info.php" class="p-3 bg-gray-50 rounded-xl hover:bg-school-green/5 border border-gray-200 transition flex justify-between items-center text-sm font-medium"><span>Update Profile Settings</span><span class="text-school-green">→</span></a>

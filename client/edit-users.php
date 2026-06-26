@@ -2,50 +2,46 @@
 
 include 'db.php';
 
-// Safe binding validation for incoming URL parameters
-$id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+$id = $_GET['id'];
 
-// Fetch user data via safe prepared injection placeholders
-$stmt = $pdo->prepare("SELECT * FROM Users WHERE User_ID = :id");
-$stmt->execute([':id' => $id]);
+$stmt = $pdo->query(
+"SELECT * FROM Users
+ WHERE User_ID = $id"
+);
+
 $user = $stmt->fetch();
 
-if (!$user) {
-    die("Error: Selected user record could not be found.");
-}
 
 if(isset($_POST['update'])) {
 
-    $fname = $_POST['fname'];
-    $lname = $_POST['lname'];
-    $email = $_POST['email'];
-    $role  = $_POST['role'];
+    $fname =
+    $_POST['fname'];
 
-    try {
-        // Fixed the error by replacing $conn->query with safe $pdo->prepare execution
-        $update_stmt = $pdo->prepare("
-            UPDATE Users 
-            SET 
-                FirstName = :fname, 
-                LastName = :lname, 
-                Email = :email, 
-                FK_Role_ID = :role 
-            WHERE User_ID = :id
-        ");
+    $lname =
+    $_POST['lname'];
 
-        $update_stmt->execute([
-            ':fname' => $fname,
-            ':lname' => $lname,
-            ':email' => $email,
-            ':role'  => $role,
-            ':id'    => $id
-        ]);
+    $email =
+    $_POST['email'];
 
-        header("Location: admin-roles.php");
-        exit;
-    } catch (PDOException $e) {
-        die("Database Error: " . $e->getMessage());
-    }
+    $role =
+    $_POST['role'];
+
+    $sql =
+    "
+    UPDATE Users
+    SET
+    FirstName='$fname',
+    LastName='$lname',
+    Email='$email',
+    FK_Role_ID='$role'
+    WHERE User_ID='$id'
+    ";
+
+    $conn->query($sql);
+
+    header(
+    "Location: admin-roles.php"
+    );
 }
 
 ?>
@@ -62,10 +58,10 @@ if(isset($_POST['update'])) {
                 extend: {
                     colors: {
                         school: {
-                            green: '#0b4222', 
+                            green: '#0b4222', // Deep forest green
                             'green-hover': '#072e17',
-                            gold: '#b8860b', 
-                            yellow: '#f4c430', 
+                            gold: '#b8860b', // Rich gold/amber
+                            yellow: '#f4c430', // Bright logo yellow
                         }
                     }
                 }
@@ -96,7 +92,7 @@ if(isset($_POST['update'])) {
                     <input 
                         type="text" 
                         name="fname" 
-                        value="<?php echo htmlspecialchars($user['FirstName']); ?>"
+                        value="<?php echo $user['FirstName']; ?>"
                         required
                         class="w-full rounded-lg border-2 border-gray-300 bg-white px-4 py-2.5 text-gray-900 placeholder-gray-400 shadow-sm transition focus:border-school-green focus:outline-none focus:ring-4 focus:ring-school-green/10"
                     >
@@ -109,7 +105,7 @@ if(isset($_POST['update'])) {
                     <input 
                         type="text" 
                         name="lname" 
-                        value="<?php echo htmlspecialchars($user['LastName']); ?>"
+                        value="<?php echo $user['LastName']; ?>"
                         required
                         class="w-full rounded-lg border-2 border-gray-300 bg-white px-4 py-2.5 text-gray-900 placeholder-gray-400 shadow-sm transition focus:border-school-green focus:outline-none focus:ring-4 focus:ring-school-green/10"
                     >
@@ -122,7 +118,7 @@ if(isset($_POST['update'])) {
                     <input 
                         type="email" 
                         name="email" 
-                        value="<?php echo htmlspecialchars($user['Email']); ?>"
+                        value="<?php echo $user['Email']; ?>"
                         required
                         class="w-full rounded-lg border-2 border-gray-300 bg-white px-4 py-2.5 text-gray-900 placeholder-gray-400 shadow-sm transition focus:border-school-green focus:outline-none focus:ring-4 focus:ring-school-green/10"
                     >

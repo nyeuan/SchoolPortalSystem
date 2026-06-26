@@ -16,39 +16,93 @@ if (!$course_id) {
     exit;
 }
 
+
+// Search and Pagination Setup
+$search = trim($_GET['search'] ?? '');
+$page = max(1, (int)($_GET['page'] ?? 1));
+$limit = 10;
+$offset = ($page - 1) * $limit;
+
 try {
-    // 1. Authorization Check based on the active user session role
+    // Course Verification Check
     if ($role === 'Professor') {
         $auth_stmt = $pdo->prepare("SELECT Course_ID, CourseCode, CourseName FROM Courses c INNER JOIN CourseInstructors ci ON c.Course_ID = ci.FK_Course_ID WHERE c.Course_ID = :course_id AND ci.FK_User_ID = :user_id");
         $auth_stmt->execute([':course_id' => $course_id, ':user_id' => $user_id]);
-        $course = $auth_stmt->fetch();
     } else {
         $auth_stmt = $pdo->prepare("SELECT c.Course_ID, c.CourseCode, c.CourseName FROM Enrollment e INNER JOIN Courses c ON e.FK_Course_ID = c.Course_ID WHERE e.FK_Course_ID = :course_id AND e.FK_User_ID = :user_id AND e.EnrollmentStatus = 'Enrolled'");
         $auth_stmt->execute([':course_id' => $course_id, ':user_id' => $user_id]);
-        $course = $auth_stmt->fetch();
     }
+    $course = $auth_stmt->fetch();
 
     if (!$course) {
         header($role === 'Professor' ? 'Location: prof-courses.php?error=unauthorized' : 'Location: courses.php?error=unauthorized');
         exit;
     }
 
-    // 2. Fetch Assigned Instructors (Professors)
+     //Fetches Grade level and Section
+    $grade_section_stmt = $pdo->prepare("
+        SELECT gl.GradeName, sec.SectionName
+        FROM Courses c
+        LEFT JOIN SectionCourses sc ON c.Course_ID = sc.FK_Course_ID
+        LEFT JOIN Section sec       ON sc.FK_Section_ID = sec.Section_ID
+        LEFT JOIN GradeLevel gl     ON sec.FK_GradeLevel_ID = gl.GradeLevel_ID
+        WHERE c.Course_ID = :course_id  
+    ");
+        $grade_section_stmt->execute([':course_id' => $course_id]);
+        $grade_section = $grade_section_stmt->fetch(PDO::FETCH_ASSOC);
+
+
+    // 1. Total Count for Pagination calculation (Filtered by Section Course Scope)
+    $count_sql = "
+        SELECT COUNT(DISTINCT u.User_ID) 
+        FROM Enrollment e 
+        INNER JOIN Users u ON e.FK_User_ID = u.User_ID 
+        INNER JOIN SectionCourses sc ON e.FK_Course_ID = sc.FK_Course_ID AND u.FK_Section_ID = sc.FK_Section_ID
+        WHERE e.FK_Course_ID = :course_id AND e.EnrollmentStatus = 'Enrolled'
+    ";
+    if ($search !== '') {
+        $count_sql .= " AND (u.FirstName LIKE :search OR u.LastName LIKE :search OR u.Email LIKE :search)";
+    }
+    $count_stmt = $pdo->prepare($count_sql);
+    $count_params = [':course_id' => $course_id];
+    if ($search !== '') { $count_params[':search'] = "%$search%"; }
+    $count_stmt->execute($count_params);
+    $total_rows = $count_stmt->fetchColumn();
+    $total_pages = max(1, ceil($total_rows / $limit));
+
+    
+    // 2. Paginated Data Fetch (Filtered by Section Course Scope)
+    $student_sql = "
+        SELECT u.FirstName, u.LastName, u.Email, u.Gender, u.Status 
+        FROM Enrollment e 
+        INNER JOIN Users u ON e.FK_User_ID = u.User_ID 
+        INNER JOIN SectionCourses sc ON e.FK_Course_ID = sc.FK_Course_ID AND u.FK_Section_ID = sc.FK_Section_ID
+        WHERE e.FK_Course_ID = :course_id AND e.EnrollmentStatus = 'Enrolled'
+    ";
+    if ($search !== '') {
+        $student_sql .= " AND (u.FirstName LIKE :search OR u.LastName LIKE :search OR u.Email LIKE :search)";
+    }
+    $student_sql .= " ORDER BY u.LastName ASC, u.FirstName ASC LIMIT :limit OFFSET :offset";
+
+    $student_stmt = $pdo->prepare($student_sql);
+    $student_stmt->bindValue(':course_id', $course_id, PDO::PARAM_INT);
+    if ($search !== '') { $student_stmt->bindValue(':search', "%$search%", PDO::PARAM_STR); }
+    $student_stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+    $student_stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+    $student_stmt->execute();
+    $students = $student_stmt->fetchAll();
+
+    // Fetch instructors separately (unpaginated structural header role)
     $prof_stmt = $pdo->prepare("SELECT u.FirstName, u.LastName, u.Email, u.Gender FROM CourseInstructors ci INNER JOIN Users u ON ci.FK_User_ID = u.User_ID WHERE ci.FK_Course_ID = :course_id");
     $prof_stmt->execute([':course_id' => $course_id]);
     $professors = $prof_stmt->fetchAll();
 
-    // 3. Fetch Enrolled Classmates (Students)
-    $student_stmt = $pdo->prepare("SELECT u.FirstName, u.LastName, u.Email, u.Gender, u.Status FROM Enrollment e INNER JOIN Users u ON e.FK_User_ID = u.User_ID WHERE e.FK_Course_ID = :course_id AND e.EnrollmentStatus = 'Enrolled' ORDER BY u.LastName ASC, u.FirstName ASC");
-    $student_stmt->execute([':course_id' => $course_id]);
-    $students = $student_stmt->fetchAll();
-
 } catch (PDOException $e) {
-    die("Database Roster Discovery Error: " . $e->getMessage());
+    die("Database Error: " . $e->getMessage());
 }
-
-$active = 'roster'; // For nav styling highlights
+$active = 'roster';
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -64,76 +118,23 @@ $active = 'roster'; // For nav styling highlights
 </head>
 <body class="bg-gradient-to-br from-school-green via-[#125730] to-school-yellow min-h-screen font-serif text-gray-800 flex flex-col md:flex-row">
 
-    <aside class="w-full md:w-64 bg-[#fcfbf7] border-b md:border-b-0 md:border-r border-school-gold/20 flex flex-col justify-between p-6 shrink-0 shadow-xl md:min-h-screen">
-        <div>
-            <div class="flex items-center space-x-3 mb-8 pb-4 border-b border-gray-200">
-                <img src="stiveslogo.png" alt="St. Ives School Logo" class="h-12 w-12 object-contain drop-shadow-sm">
-                <div>
-                    <h2 class="font-bold text-school-green tracking-wide leading-tight">St. Ives School</h2>
-                    <p class="text-xs text-gray-500 italic">Wisdom & Charity</p>
-                </div>
-            </div>
-            <nav class="space-y-2">
-                <?php if ($_SESSION['role'] === 'Professor'): ?>
-                    <a href="prof-homepage.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
-                        <span class="text-xl">🏛️</span>
-                        <span>Institution Home</span>
-                    </a>
-                    <a href="prof-courses.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl bg-school-green text-white font-semibold transition shadow-md">
-                        <span class="text-xl">📚</span>
-                        <span>Courses</span>
-                    </a>
-                    <a href="Account-info.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
-                        <span class="text-xl opacity-70 group-hover:opacity-100">👤</span>
-                        <span>Account</span>
-                    </a>
+    <?php include 'sidebar.php'; ?>
 
-                <?php else: ?>
-                    <a href="homepage.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
-                        <span class="text-xl">🏛️</span>
-                        <span>Institution Home</span>
-                    </a>
-                    <a href="courses.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl bg-school-green text-white font-semibold transition shadow-md">
-                        <span class="text-xl">📚</span>
-                        <span>Courses</span>
-                    </a>
-                    <a href="activities.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
-                        <span class="text-xl opacity-70 group-hover:opacity-100">🏆</span>
-                        <span>Activities</span>
-                    </a>
-                    <a href="grades.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
-                        <span class="text-xl opacity-70 group-hover:opacity-100">📊</span>
-                        <span>Grades</span>
-                    </a>
-                    <a href="Account-info.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl text-school-green hover:bg-school-green/5 font-semibold transition group">
-                        <span class="text-xl opacity-70 group-hover:opacity-100">👤</span>
-                        <span>Account</span>
-                    </a>
-                <?php endif; ?>
-            </nav>
-        </div>
-        <div class="mt-8 pt-4 border-t border-gray-200 flex items-center justify-between">
-            <div class="flex items-center space-x-3">
-                <div class="w-9 h-9 rounded-full bg-school-gold text-white flex items-center justify-center font-bold font-sans text-sm shadow-sm"><?= $initials ?></div>
-                <div>
-                    <h4 class="text-sm font-bold text-school-green leading-tight"><?= $full_name ?></h4>
-                    <p class="text-xs text-gray-500"><?= $role ?> Account</p>
-                </div>
-            </div>
-            <a href="logout.php" title="Log Out" class="text-gray-400 hover:text-red-600 transition p-1 text-lg">🚪</a>
-        </div>
-    </aside>
-
-    <main class="flex-1 p-4 sm:p-8 overflow-y-auto max-w-6xl mx-auto w-full">
+    <main class="ml-0 md:ml-64 flex-1 p-4 sm:p-8 min-h-screen w-full">
         <a href="<?= $role === 'Professor' ? 'manage-course.php?course_id='.$course_id : 'view-course.php?course_id='.$course_id ?>" class="inline-flex items-center text-sm text-white/90 hover:text-white mb-4 font-sans font-medium">
             ← Back to Manage Course
         </a>
 
-        <section class="bg-[#fcfbf7] rounded-3xl p-6 shadow-lg border border-school-gold/20 mb-6">
-            <h1 class="text-4xl font-bold text-school-green"><?= htmlspecialchars($course['CourseCode']) ?> — Class Roster</h1>
-            <p class="text-gray-500 italic mt-2"><?= htmlspecialchars($course['CourseName']) ?></p>
+        <section class="bg-[#fcfbf7] rounded-3xl p-6 shadow-lg border border-school-gold/20 mb-6 flex justify-between items-center">
+            <div>
+                <p class="text-xs uppercase tracking-wide text-gray-600 font-sans"><?= htmlspecialchars($course['CourseCode']) ?> — <?= htmlspecialchars($course['CourseName']) ?></p>
+                <h1 class="text-4xl font-bold text-school-green mt-1">Class Roster</h1>
+            
+                <span class="text-xs bg-school-gold text-white px-2.5 py-1 rounded-full font-sans font-bold uppercase tracking-wider shadow-sm">
+                    <?= htmlspecialchars($grade_section['GradeName'] ?? 'Academic') ?> — <?= htmlspecialchars($grade_section['SectionName']) ?>
+                </span>   
+            </div>
         </section>
-
         <?php 
         $required_role = $role; // Satisfies internal layout variables inside course-nav.php
         include 'course-nav.php'; 
@@ -157,8 +158,13 @@ $active = 'roster'; // For nav styling highlights
         </section>
 
         <section class="bg-[#fcfbf7] rounded-3xl shadow-lg border border-school-gold/20 overflow-hidden font-sans">
-            <div class="p-6 border-b">
-                <h2 class="text-xl font-bold text-school-green">👨‍🎓 Enrolled Students (<?= count($students) ?>)</h2>
+            <div class="p-6 border-b flex flex-col sm:flex-row justify-between items-center gap-4">
+                <h2 class="text-xl font-bold text-school-green">👨‍🎓 Enrolled Students (<?= $total_rows ?>)</h2>
+                <form method="GET" action="course-roster.php" class="w-full sm:w-72 flex gap-2 font-sans">
+                    <input type="hidden" name="course_id" value="<?= $course_id ?>">
+                    <input type="text" name="search" value="<?= htmlspecialchars($search) ?>" placeholder="Search student name..." class="w-full text-xs border rounded-xl px-3 py-2 focus:ring-2 focus:ring-school-green focus:outline-none">
+                    <button type="submit" class="bg-school-green text-white text-xs px-3 py-2 rounded-xl font-semibold hover:opacity-90">Find</button>
+                </form>
             </div>
             <div class="overflow-x-auto">
                 <table class="w-full text-left border-collapse">
@@ -197,6 +203,15 @@ $active = 'roster'; // For nav styling highlights
                         <?php endif; ?>
                     </tbody>
                 </table>
+                <div class="p-4 bg-gray-50 border-t flex justify-center items-center gap-2 font-sans text-xs">
+                    <?php if ($page > 1): ?>
+                        <a href="?course_id=<?= $course_id ?>&page=<?= $page - 1 ?>&search=<?= urlencode($search) ?>" class="px-3 py-1.5 rounded-lg bg-gray-200 hover:bg-gray-300">←</a>
+                    <?php endif; ?>
+                    <span class="font-semibold text-gray-600">Page <?= $page ?> of <?= $total_pages ?></span>
+                    <?php if ($page < $total_pages): ?>
+                        <a href="?course_id=<?= $course_id ?>&page=<?= $page + 1 ?>&search=<?= urlencode($search) ?>" class="px-3 py-1.5 rounded-lg bg-gray-200 hover:bg-gray-300">→</a>
+                    <?php endif; ?>
+                </div>
             </div>
         </section>
     </main>
