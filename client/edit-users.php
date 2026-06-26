@@ -1,5 +1,6 @@
 <?php
-
+$required_role = 'Admin';
+include 'session_check.php';
 include 'db.php';
 
 $id = $_GET['id'];
