@@ -5,42 +5,61 @@ include '../includes/session_check.php';
 include '../config/db.php';
 
 $student_id = $_SESSION['user_id'];
-$filter_term = isset($_GET['term']) ? (int)$_GET['term'] : 0;
 
-// Fetch terms dropdown selection array
+// Get the term filter value. Default to NULL if not set or not explicitly '0' (All Terms)
+$filter_term = isset($_GET['term']) ? $_GET['term'] : null;
+
+// Fetch terms for dropdown selection array
 try {
     $terms = $pdo->query("SELECT Term_ID, TermName FROM term ORDER BY StartDate DESC")->fetchAll();
 } catch (PDOException $e) { 
     $terms = []; 
 }
 
-// Default to the latest term if none explicitly selected 
-if ($filter_term === 0) {
-    $active_term_stmt = $pdo->prepare("
-        SELECT e.FK_Term_ID 
-        FROM Enrollment e
-        WHERE e.FK_User_ID = ? AND e.EnrollmentStatus = 'Enrolled' AND e.FK_Term_ID IS NOT NULL
-        ORDER BY e.Enrollment_ID DESC 
-        LIMIT 1
-    ");
-    $active_term_stmt->execute([$student_id]);
-    $filter_term = (int)$active_term_stmt->fetchColumn();
+// By default (on first load), fetch the student's latest active enrollment term
+if ($filter_term === null) {
+    try {
+        $active_term_stmt = $pdo->prepare("
+            SELECT e.FK_Term_ID 
+            FROM enrollment e
+            WHERE e.FK_User_ID = ? AND e.EnrollmentStatus = 'Enrolled' AND e.FK_Term_ID IS NOT NULL
+            ORDER BY e.Enrollment_ID DESC 
+            LIMIT 1
+        ");
+        $active_term_stmt->execute([$student_id]);
+        $latest_enrolled_term = $active_term_stmt->fetchColumn();
 
-    // Secondary fallback: If no active enrollments are found anywhere, use the latest global school term
-    if ($filter_term === 0 && !empty($terms)) {
-        $filter_term = (int)$terms[0]['Term_ID'];
+        if ($latest_enrolled_term) {
+            $filter_term = (int)$latest_enrolled_term;
+        } elseif (!empty($terms)) {
+            // Secondary fallback: If student has no active enrollments, grab the most recent term globally
+            $filter_term = (int)$terms[0]['Term_ID'];
+        } else {
+            $filter_term = 0; // Absolute fallback if database terms are entirely empty
+        }
+    } catch (PDOException $e) {
+        $filter_term = 0;
     }
+} else {
+    $filter_term = (int)$filter_term;
 }
 
-$where_sql = "e.FK_User_ID = :student_id AND e.EnrollmentStatus = 'Enrolled' AND e.FK_Term_ID = :term_id";
-$params = [':student_id' => $student_id, ':term_id' => $filter_term];
+// Build dynamic WHERE clause depending on whether a single term or "All Terms" (0) is filtered
+if ($filter_term > 0) {
+    $where_sql = "e.FK_User_ID = :student_id AND e.EnrollmentStatus = 'Enrolled' AND e.FK_Term_ID = :term_id";
+    $params = [':student_id' => $student_id, ':term_id' => $filter_term];
+} else {
+    // "All Terms" selection
+    $where_sql = "e.FK_User_ID = :student_id AND e.EnrollmentStatus = 'Enrolled'";
+    $params = [':student_id' => $student_id];
+}
 
 try {
     $grades_stmt = $pdo->prepare("
         SELECT c.Course_ID, c.CourseCode, c.CourseName, cg.FinalGrade, cg.Remarks 
-        FROM Enrollment e 
-        INNER JOIN Courses c      ON e.FK_Course_ID = c.Course_ID 
-        LEFT JOIN CourseGrade cg  ON e.Enrollment_ID = cg.FK_Enrollment_ID 
+        FROM enrollment e 
+        INNER JOIN courses c       ON e.FK_Course_ID = c.Course_ID 
+        LEFT JOIN coursegrade cg  ON e.Enrollment_ID = cg.FK_Enrollment_ID 
         WHERE $where_sql 
         ORDER BY c.CourseCode ASC
     ");
@@ -84,14 +103,14 @@ function determineLetterGrade($grade) {
         <section class="bg-[#fcfbf7] rounded-2xl p-5 border shadow mb-6">
             <form method="GET" action="grades.php" class="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
                 <label class="text-sm font-semibold text-school-green font-sans shrink-0">Filter by Term:</label>
-                <select name="term" onchange="this.form.submit()" class="border rounded-xl px-4 py-3 text-sm bg-white">
-    <option value="0">All Terms</option>
-    <?php foreach ($terms as $t): ?>
-        <option value="<?= (int)$t['Term_ID'] ?>" <?= ($filter_term == $t['Term_ID']) ? 'selected' : '' ?>>
-            <?= htmlspecialchars($t['TermName']) ?>
-        </option>
-    <?php endforeach; ?>
-</select>
+                <select name="term" onchange="this.form.submit()" class="border rounded-xl px-4 py-3 text-sm bg-white cursor-pointer">
+                    <option value="0" <?= ($filter_term === 0) ? 'selected' : '' ?>>Latest Term</option>
+                    <?php foreach ($terms as $t): ?>
+                        <option value="<?= (int)$t['Term_ID'] ?>" <?= ($filter_term === (int)$t['Term_ID']) ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($t['TermName']) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
             </form>
         </section>
 
@@ -114,10 +133,6 @@ function determineLetterGrade($grade) {
                             </tr>
                         <?php else: foreach ($academic_report as $row): 
                             $is_pending   = ($row['FinalGrade'] === null);
-                            $remark_color = 'text-gray-400';
-                            if (!$is_pending) {
-                                $remark_color = ($row['Remarks'] === 'Passed') ? 'text-emerald-700' : 'text-red-600';
-                            }
                         ?>
                             <tr onclick="window.location='course-grades.php?course_id=<?= $row['Course_ID'] ?>';" class="hover:bg-school-green/5 cursor-pointer transition">
                                 <td class="py-4 px-6 font-bold text-school-green font-sans"><?= htmlspecialchars($row['CourseCode']) ?></td>
