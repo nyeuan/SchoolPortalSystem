@@ -26,7 +26,7 @@ try {
     $valid_student_ids = $roster_stmt->fetchAll(PDO::FETCH_COLUMN);
 
     $existing_stmt = $pdo->prepare("SELECT Attendance_ID, FK_Student_ID FROM Attendance WHERE FK_Course_ID = :course_id AND AttendanceDate = :selected_date");
-    $existing_stmt->execute([':course_id' => $course_id, ':selected_date' => $selected_date]);
+    $existing_stmt->execute([':course_id' => $course_id, ':selected_date' => $attendance_date]);
     $existing_by_student = [];
     foreach ($existing_stmt->fetchAll() as $row) { $existing_by_student[$row['FK_Student_ID']] = $row['Attendance_ID']; }
 

@@ -147,9 +147,10 @@ $active = 'coursegrades';
                                             $total_max_score += $asg['MaxScore']; if ($score !== null) { $total_student_score += $score; }
                                         ?>
                                             <div class="flex justify-between items-center py-0.5 border-b border-gray-100 last:border-none">
-                                                <a href="grade-submissions.php?assignment_id=<?= $asg_id ?>#user-<?= $student['User_ID'] ?>" class="text-gray-600 font-medium hover:text-school-green underline decoration-transparent hover:decoration-school-green transition">
-                                                    📝 <?= htmlspecialchars($asg['Title']) ?>
-                                                </a>
+                                                <a href="grade-submissions.php?assignment_id=<?= $asg_id ?>#user-<?= $student['User_ID'] ?>" 
+                                                    class="text-gray-600 font-medium truncate max-w-[280px] hover:text-school-green underline decoration-transparent hover:decoration-school-green transition duration-150 active-target-link">
+                                                        📝 <?= htmlspecialchars($asg['Title']) ?>
+                                                    </a>
                                                 <span class="font-mono">
                                                     <?= $score !== null ? '<span class="text-emerald-700 font-bold">' . htmlspecialchars((float)$score) . '</span>' : '<span class="text-amber-600 italic">Missing</span>' ?> / <?= htmlspecialchars((float)$asg['MaxScore']) ?>
                                                 </span>
