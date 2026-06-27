@@ -57,7 +57,6 @@ try {
         SELECT COUNT(DISTINCT u.User_ID) 
         FROM Enrollment e 
         INNER JOIN Users u ON e.FK_User_ID = u.User_ID 
-        INNER JOIN SectionCourses sc ON e.FK_Course_ID = sc.FK_Course_ID AND u.FK_Section_ID = sc.FK_Section_ID
         WHERE e.FK_Course_ID = :course_id AND e.EnrollmentStatus = 'Enrolled'
     ";
     if ($search !== '') {
@@ -75,7 +74,6 @@ try {
         SELECT u.FirstName, u.LastName, u.Email, u.Gender, u.Status 
         FROM Enrollment e 
         INNER JOIN Users u ON e.FK_User_ID = u.User_ID 
-        INNER JOIN SectionCourses sc ON e.FK_Course_ID = sc.FK_Course_ID AND u.FK_Section_ID = sc.FK_Section_ID
         WHERE e.FK_Course_ID = :course_id AND e.EnrollmentStatus = 'Enrolled'
     ";
     if ($search !== '') {

@@ -32,8 +32,7 @@ try {
         FROM Courses c
         INNER JOIN Enrollment e         ON c.Course_ID = e.FK_Course_ID
         INNER JOIN Users stu            ON e.FK_User_ID = stu.User_ID
-        INNER JOIN SectionCourses sc    ON c.Course_ID = sc.FK_Course_ID AND stu.FK_Section_ID = sc.FK_Section_ID
-        LEFT  JOIN Section sec          ON stu.FK_Section_ID = sec.Section_ID
+        LEFT  JOIN Section sec          ON c.FK_Section_ID = sec.Section_ID
         LEFT  JOIN GradeLevel gl        ON sec.FK_GradeLevel_ID = gl.GradeLevel_ID
         LEFT  JOIN CourseInstructors ci ON c.Course_ID = ci.FK_Course_ID
         LEFT  JOIN Users u              ON ci.FK_User_ID = u.User_ID

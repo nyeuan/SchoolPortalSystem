@@ -4,34 +4,71 @@ $required_role = 'Student';
 include '../includes/session_check.php';
 include '../config/db.php';
 
-$student_id = $_SESSION['user_id']; $filter_term = isset($_GET['term']) ? (int)$_GET['term'] : 0;
+$student_id = $_SESSION['user_id'];
+$filter_term = isset($_GET['term']) ? (int)$_GET['term'] : 0;
 
+// Fetch terms dropdown selection array
 try {
-    $terms = $pdo->query("SELECT Term_ID, TermName FROM Term ORDER BY StartDate DESC")->fetchAll();
-} catch (PDOException $e) { $terms = []; }
+    $terms = $pdo->query("SELECT Term_ID, TermName FROM term ORDER BY StartDate DESC")->fetchAll();
+} catch (PDOException $e) { 
+    $terms = []; 
+}
 
-if ($filter_term === 0 && !empty($terms)) { $filter_term = (int)$terms[0]['Term_ID']; }
+// Default to the latest term if none explicitly selected 
+if ($filter_term === 0) {
+    $active_term_stmt = $pdo->prepare("
+        SELECT e.FK_Term_ID 
+        FROM Enrollment e
+        WHERE e.FK_User_ID = ? AND e.EnrollmentStatus = 'Enrolled' AND e.FK_Term_ID IS NOT NULL
+        ORDER BY e.Enrollment_ID DESC 
+        LIMIT 1
+    ");
+    $active_term_stmt->execute([$student_id]);
+    $filter_term = (int)$active_term_stmt->fetchColumn();
+
+    // Secondary fallback: If no active enrollments are found anywhere, use the latest global school term
+    if ($filter_term === 0 && !empty($terms)) {
+        $filter_term = (int)$terms[0]['Term_ID'];
+    }
+}
 
 $where_sql = "e.FK_User_ID = :student_id AND e.EnrollmentStatus = 'Enrolled' AND e.FK_Term_ID = :term_id";
 $params = [':student_id' => $student_id, ':term_id' => $filter_term];
 
 try {
-    $grades_stmt = $pdo->prepare("SELECT c.Course_ID, c.CourseCode, c.CourseName, cg.FinalGrade, cg.Remarks FROM Enrollment e INNER JOIN Courses c ON e.FK_Course_ID = c.Course_ID LEFT JOIN CourseGrade cg ON e.Enrollment_ID = cg.FK_Enrollment_ID WHERE $where_sql ORDER BY c.CourseCode ASC");
-    $grades_stmt->execute($params); $academic_report = $grades_stmt->fetchAll();
-} catch (PDOException $e) { die("Error: " . $e->getMessage()); }
+    $grades_stmt = $pdo->prepare("
+        SELECT c.Course_ID, c.CourseCode, c.CourseName, cg.FinalGrade, cg.Remarks 
+        FROM Enrollment e 
+        INNER JOIN Courses c      ON e.FK_Course_ID = c.Course_ID 
+        LEFT JOIN CourseGrade cg  ON e.Enrollment_ID = cg.FK_Enrollment_ID 
+        WHERE $where_sql 
+        ORDER BY c.CourseCode ASC
+    ");
+    $grades_stmt->execute($params); 
+    $academic_report = $grades_stmt->fetchAll();
+} catch (PDOException $e) { 
+    die("Error: " . $e->getMessage()); 
+}
 
 function determineLetterGrade($grade) {
-    if ($grade === null) return '—'; if ($grade >= 95) return 'A+'; if ($grade >= 90) return 'A'; if ($grade >= 85) return 'B+'; if ($grade >= 80) return 'B'; if ($grade >= 75) return 'C'; return 'F';
+    if ($grade === null) return '—'; 
+    if ($grade >= 95) return 'A+'; 
+    if ($grade >= 90) return 'A'; 
+    if ($grade >= 85) return 'B+'; 
+    if ($grade >= 80) return 'B'; 
+    if ($grade >= 75) return 'C'; 
+    return 'F';
 }
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>St. Ives School - Academic Report</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
-        tailwind.config = { theme: { extend: { colors: { school: { green: '#0b4222', gold: '#b8860b' } } } } }
+        tailwind.config = { theme: { extend: { colors: { school: { green: '#0b4222', 'green-hover': '#072e17', gold: '#b8860b', yellow: '#f4c430' } } } } }
     </script>
 </head>
 <body class="bg-gradient-to-br from-school-green via-[#125730] to-school-yellow min-h-screen font-serif text-gray-800 flex flex-col md:flex-row">
@@ -39,33 +76,72 @@ function determineLetterGrade($grade) {
     <?php include '../includes/sidebar.php'; ?>
 
     <main class="ml-0 md:ml-64 flex-1 p-4 sm:p-8 min-h-screen w-full">
-        <section class="bg-[#fcfbf7] rounded-2xl p-6 border shadow mb-6 flex justify-between items-center"><h1 class="text-3xl font-bold text-school-green">Academic Report</h1><a href="download-grades.php?term=<?= $filter_term ?>" class="bg-school-gold text-white font-sans font-bold text-xs px-5 py-3.5 rounded-xl shadow">💼 Export PDF</a></section>
+        <section class="bg-[#fcfbf7] rounded-2xl p-6 border shadow mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <h1 class="text-3xl font-bold tracking-wide text-school-green">Academic Report</h1>
+            <a href="download-grades.php?term=<?= $filter_term ?>" class="shrink-0 inline-block bg-school-gold hover:opacity-90 text-white font-sans font-bold text-xs px-5 py-3.5 rounded-xl shadow-md transition">💼 Export PDF</a>
+        </section>
 
         <section class="bg-[#fcfbf7] rounded-2xl p-5 border shadow mb-6">
-            <form method="GET" class="flex gap-4 items-center">
-                <label class="text-sm font-semibold text-school-green font-sans">Term:</label>
-                <select name="term" onchange="this.form.submit()" class="border rounded-xl px-4 py-3 text-sm w-72 bg-white font-sans">
-                    <?php foreach ($terms as $t): ?><option value="<?= $t['Term_ID'] ?>" <?= ($filter_term === (int)$t['Term_ID']) ? 'selected' : '' ?>><?= htmlspecialchars($t['TermName']) ?></option><?php endforeach; ?>
-                </select>
+            <form method="GET" action="grades.php" class="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+                <label class="text-sm font-semibold text-school-green font-sans shrink-0">Filter by Term:</label>
+                <select name="term" onchange="this.form.submit()" class="border rounded-xl px-4 py-3 text-sm bg-white">
+    <option value="0">All Terms</option>
+    <?php foreach ($terms as $t): ?>
+        <option value="<?= (int)$t['Term_ID'] ?>" <?= ($filter_term == $t['Term_ID']) ? 'selected' : '' ?>>
+            <?= htmlspecialchars($t['TermName']) ?>
+        </option>
+    <?php endforeach; ?>
+</select>
             </form>
         </section>
 
         <section class="bg-[#fcfbf7] rounded-2xl border shadow overflow-hidden font-sans text-sm">
-            <table class="w-full text-left border-collapse">
-                <thead><tr class="bg-school-green text-white uppercase text-xs border-b"><th class="py-4 px-6 font-semibold">Course Code</th><th class="py-4 px-6 font-semibold">Course Name</th><th class="py-4 px-6 text-center">Grade</th><th class="py-4 px-6 text-right">Remarks</th></tr></thead>
-                <tbody class="divide-y bg-white">
-                    <?php if (empty($academic_report)): ?>
-                        <tr><td colspan="4" class="py-8 px-6 text-center text-gray-400 italic">No records.</td></tr>
-                    <?php else: foreach ($academic_report as $row): $is_p = ($row['FinalGrade'] === null); ?>
-                            <tr onclick="window.location='course-grades.php?course_id=<?= $row['Course_ID'] ?>';" class="hover:bg-gray-50 cursor-pointer transition">
-                                <td class="py-4 px-6 font-bold text-school-green"><?= htmlspecialchars($row['CourseCode']) ?></td>
-                                <td class="py-4 px-6 font-medium text-gray-700"><?= htmlspecialchars($row['CourseName']) ?></td>
-                                <td class="py-4 px-6 text-center font-bold text-amber-600"><?= determineLetterGrade($row['FinalGrade']) ?></td>
-                                <td class="py-4 px-6 text-right font-bold"><?= $is_p ? '<span class="text-amber-600">Pending</span>' : htmlspecialchars($row['Remarks']) ?></td>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-school-green text-white uppercase text-xs tracking-wider border-b border-school-gold/20">
+                            <th class="py-4 px-6 font-semibold">Course Code</th>
+                            <th class="py-4 px-6 font-semibold">Course Name</th>
+                            <th class="py-4 px-6 font-semibold text-center">Letter Grade</th>
+                            <th class="py-4 px-6 font-semibold text-center">Percentage</th>
+                            <th class="py-4 px-6 font-semibold text-right">Remarks</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100 text-sm bg-white">
+                        <?php if (empty($academic_report)): ?>
+                            <tr>
+                                <td colspan="5" class="py-8 px-6 text-center text-gray-400 italic font-sans">No grade records match your current filter.</td>
                             </tr>
-                    <?php endforeach; endif; ?>
-                </tbody>
-            </table>
+                        <?php else: foreach ($academic_report as $row): 
+                            $is_pending   = ($row['FinalGrade'] === null);
+                            $remark_color = 'text-gray-400';
+                            if (!$is_pending) {
+                                $remark_color = ($row['Remarks'] === 'Passed') ? 'text-emerald-700' : 'text-red-600';
+                            }
+                        ?>
+                            <tr onclick="window.location='course-grades.php?course_id=<?= $row['Course_ID'] ?>';" class="hover:bg-school-green/5 cursor-pointer transition">
+                                <td class="py-4 px-6 font-bold text-school-green font-sans"><?= htmlspecialchars($row['CourseCode']) ?></td>
+                                <td class="py-4 px-6 font-medium text-gray-700"><?= htmlspecialchars($row['CourseName']) ?></td>
+                                <td class="py-4 px-6 text-center font-bold font-sans text-base <?= $is_pending ? 'text-gray-400' : 'text-amber-600' ?>">
+                                    <?= determineLetterGrade($row['FinalGrade']) ?>
+                                </td>
+                                <td class="py-4 px-6 text-center font-bold font-sans text-gray-600">
+                                    <?= !$is_pending ? htmlspecialchars(number_format($row['FinalGrade'], 2)) . '%' : '—' ?>
+                                </td>
+                                <td class="py-4 px-6 text-right">
+                                    <?php if ($is_pending): ?>
+                                        <span class="inline-block text-xs font-semibold px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">Pending</span>
+                                    <?php else: ?>
+                                        <span class="inline-block text-xs font-semibold px-2 py-0.5 rounded <?= $row['Remarks'] === 'Passed' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200' ?> border">
+                                            <?= htmlspecialchars($row['Remarks']) ?>
+                                        </span>
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
+                        <?php endforeach; endif; ?>
+                    </tbody>
+                </table>
+            </div>
         </section>
     </main>
 </body>

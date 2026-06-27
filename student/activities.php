@@ -43,6 +43,7 @@ try {
     $activities_stmt->execute($params);
     $assigned_activities = $activities_stmt->fetchAll();
 } catch (PDOException $e) { die("Error: " . $e->getMessage()); }
+
 ?>
 <!DOCTYPE html>
 <html lang="en">

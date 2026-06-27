@@ -9,29 +9,18 @@ $course_id = filter_input(INPUT_GET, 'course_id', FILTER_VALIDATE_INT);
 if (!$course_id) { header('Location: courses.php'); exit; }
 
 try {
-    $enroll_stmt = $pdo->prepare("
-        SELECT e.Enrollment_ID
-        FROM Enrollment e
-        INNER JOIN Users u ON e.FK_User_ID = u.User_ID
-        INNER JOIN SectionCourses sc ON e.FK_Course_ID = sc.FK_Course_ID AND u.FK_Section_ID = sc.FK_Section_ID
-        WHERE e.FK_Course_ID = :course_id AND e.FK_User_ID = :student_id AND e.EnrollmentStatus = 'Enrolled'
-    ");
-    $enroll_stmt->execute([':course_id' => $course_id, ':student_id' => $student_id]);
-    if (!$enroll_stmt->fetch()) { header('Location: courses.php?error=not_enrolled'); exit; }
-
     $course_stmt = $pdo->prepare("
         SELECT c.Course_ID, c.CourseCode, c.CourseName, c.Status, sec.SectionName, gl.GradeName,
                CONCAT(u.FirstName, ' ', u.LastName) AS InstructorName
         FROM Courses c
-        INNER JOIN SectionCourses sc ON c.Course_ID = sc.FK_Course_ID
-        INNER JOIN Users stu ON stu.User_ID = :student_id AND stu.FK_Section_ID = sc.FK_Section_ID
-        LEFT  JOIN Section sec ON sc.FK_Section_ID = sec.Section_ID
-        LEFT  JOIN GradeLevel gl ON sec.FK_GradeLevel_ID = gl.GradeLevel_ID
+        LEFT  JOIN Section sec          ON c.FK_Section_ID = sec.Section_ID
+        LEFT  JOIN GradeLevel gl        ON sec.FK_GradeLevel_ID = gl.GradeLevel_ID
         LEFT  JOIN CourseInstructors ci ON c.Course_ID = ci.FK_Course_ID
-        LEFT  JOIN Users u ON ci.FK_User_ID = u.User_ID
+        LEFT  JOIN Users u              ON ci.FK_User_ID = u.User_ID
         WHERE c.Course_ID = :course_id
     ");
-    $course_stmt->execute([':course_id' => $course_id, ':student_id' => $student_id]);
+    // Only pass :course_id since :student_id is no longer needed in the SQL text above
+    $course_stmt->execute([':course_id' => $course_id]);
     $course = $course_stmt->fetch();
 
     $modules_stmt = $pdo->prepare("SELECT CourseModule_ID, ModuleName, ModuleSequence FROM CourseModule WHERE FK_Course_ID = :course_id ORDER BY ModuleSequence ASC"); 

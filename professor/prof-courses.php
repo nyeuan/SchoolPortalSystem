@@ -36,8 +36,7 @@ try {
         SELECT DISTINCT c.Course_ID, c.CourseCode, c.CourseName, c.Status, sec.SectionName, gl.GradeName
         FROM Courses c
         INNER JOIN CourseInstructors ci ON c.Course_ID = ci.FK_Course_ID
-        LEFT  JOIN SectionCourses sc    ON c.Course_ID = sc.FK_Course_ID
-        LEFT  JOIN Section sec          ON sc.FK_Section_ID = sec.Section_ID
+        LEFT  JOIN Section sec          ON c.FK_Section_ID = sec.Section_ID
         LEFT  JOIN GradeLevel gl        ON sec.FK_GradeLevel_ID = gl.GradeLevel_ID
         WHERE $where_sql
         ORDER BY c.CourseCode ASC, sec.SectionName ASC

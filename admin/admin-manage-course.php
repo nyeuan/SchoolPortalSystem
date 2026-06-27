@@ -231,11 +231,18 @@ $active = 'courses';
 
                     <?php if ($total_pages > 1): ?>
                         <nav class="flex items-center justify-center gap-1 mt-8 font-sans pb-6 shrink-0">
-                            <a href="admin-manage-course.php?grade_level_id=<?= $selected_grade_id ?>&page=<?= max(1, $page - 1) ?>&search=<?= urlencode($search) ?>" class="px-3 py-2 rounded-xl bg-[#fcfbf7] border border-school-gold/30 text-school-green hover:bg-school-green/5 transition text-xs font-semibold <?= $page === 1 ? 'pointer-events-none opacity-40' : '' ?>">← Prev</a>
-                            <?php foreach (range(1, $total_pages) as $i): ?>
-                                <a href="admin-manage-course.php?grade_level_id=<?= $selected_grade_id ?>&page=<?= $i ?>&search=<?= urlencode($search) ?>" class="w-8 h-8 flex items-center justify-center rounded-xl text-xs font-bold transition <?= $page === $i ? 'bg-school-green text-white shadow-md' : 'bg-[#fcfbf7] text-school-green border border-school-gold/20 hover:bg-school-green/5' ?>"><?= $i ?></a>
+                            <a href="admin-manage-course.php?grade_level_id=<?= $selected_grade_id ?>&page=<?= max(1, $page - 1) ?>&search=<?= urlencode($search) ?>" 
+                            class="px-3 py-2 rounded-xl bg-[#fcfbf7] border border-school-gold/30 text-school-green hover:bg-school-green/5 transition text-xs font-semibold <?= $page == 1 ? 'pointer-events-none opacity-40' : '' ?>">← Prev</a>
+                            
+                            <?php foreach (range(max(1, $page - 2), min($total_pages, $page + 2)) as $i): ?>
+                                <a href="admin-manage-course.php?grade_level_id=<?= $selected_grade_id ?>&page=<?= $i ?>&search=<?= urlencode($search) ?>" 
+                                class="w-8 h-8 flex items-center justify-center rounded-xl text-xs font-bold transition <?= $page == $i ? 'bg-school-green text-white shadow-md' : 'bg-[#fcfbf7] text-school-green border border-school-gold/20 hover:bg-school-green/5' ?>">
+                                    <?= $i ?>
+                                </a>
                             <?php endforeach; ?>
-                            <a href="admin-manage-course.php?grade_level_id=<?= $selected_grade_id ?>&page=<?= min($total_pages, $page + 1) ?>&search=<?= urlencode($search) ?>" class="px-3 py-2 rounded-xl bg-[#fcfbf7] border border-school-gold/30 text-school-green hover:bg-school-green/5 transition text-xs font-semibold <?= $page === $total_pages ? 'pointer-events-none opacity-40' : '' ?>">Next →</a>
+
+                            <a href="admin-manage-course.php?grade_level_id=<?= $selected_grade_id ?>&page=<?= min($total_pages, $page + 1) ?>&search=<?= urlencode($search) ?>" 
+                            class="px-3 py-2 rounded-xl bg-[#fcfbf7] border border-school-gold/30 text-school-green hover:bg-school-green/5 transition text-xs font-semibold <?= $page == $total_pages ? 'pointer-events-none opacity-40' : '' ?>">Next →</a>
                         </nav>
                     <?php endif; ?>
                 <?php endif; ?>
