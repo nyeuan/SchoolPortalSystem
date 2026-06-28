@@ -80,7 +80,21 @@ $active = 'coursegrades';
     <title>St. Ives School - Manage Grades</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
-        tailwind.config = { theme: { extend: { colors: { school: { green: '#0b4222', 'green-hover': '#072e17', gold: '#b8860b', yellow: '#f4c430' } } } } }
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        school: {
+                            green: '#0b4222',
+                            'green-hover': '#072e17',
+                            'green-light': '#1e5e37',
+                            gold: '#b8860b',
+                            yellow: '#f4c430',
+                        }
+                    }
+                }
+            }
+        }
     </script>
 </head>
 <body class="bg-gradient-to-br from-school-green via-[#125730] to-school-yellow min-h-screen font-serif text-gray-800 flex flex-col md:flex-row">

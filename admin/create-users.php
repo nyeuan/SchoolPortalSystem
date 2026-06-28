@@ -39,7 +39,19 @@ if (isset($_POST['create'])) {
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
-            theme: { extend: { colors: { school: { green: '#0b4222', 'green-hover': '#072e17', gold: '#b8860b', yellow: '#f4c430' } } } }
+            theme: {
+                extend: {
+                    colors: {
+                        school: {
+                            green: '#0b4222',
+                            'green-hover': '#072e17',
+                            'green-light': '#1e5e37',
+                            gold: '#b8860b',
+                            yellow: '#f4c430',
+                        }
+                    }
+                }
+            }
         }
     </script>
 </head>
