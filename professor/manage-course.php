@@ -95,6 +95,14 @@ $active = 'content';
     <main class="ml-0 md:ml-64 flex-1 p-4 sm:p-8 min-h-screen w-full">
         <a href="prof-courses.php" class="inline-flex items-center text-sm text-white/90 hover:text-white mb-4 font-sans font-medium">← Back to Courses</a>
 
+        <!-- Toast Notifications -->
+        <?php if ($success_msg): ?>
+            <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-xl mb-4 font-sans text-sm">Action completed successfully!</div>
+        <?php endif; ?>
+        <?php if ($error_msg): ?>
+            <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-xl mb-4 font-sans text-sm">An error occurred. Please check your system input fields.</div>
+        <?php endif; ?>
+
         <section class="bg-[#fcfbf7] rounded-3xl p-6 shadow-lg border border-school-gold/20 mb-6">
             <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
                 <div>
@@ -118,7 +126,22 @@ $active = 'content';
                 $mod_assignments = $assignments_by_module[$mod_id] ?? [];
         ?>
                 <details <?= $index === 0 ? 'open' : '' ?> class="bg-[#fcfbf7] rounded-3xl shadow border border-school-gold/20 mb-6">
-                    <summary class="list-none cursor-pointer"><div class="p-6 flex justify-between items-center"><h2 class="text-2xl font-bold text-school-green">📁 <?= htmlspecialchars($module['ModuleName']) ?></h2><span class="text-xs text-gray-400 font-sans">Sequence <?= (int)$module['ModuleSequence'] ?></span></div></summary>
+                    <summary class="list-none cursor-pointer">
+                        <div class="p-6 flex justify-between items-center">
+                            <div class="flex items-center gap-4">
+                                <h2 class="text-2xl font-bold text-school-green">📁 <?= htmlspecialchars($module['ModuleName']) ?></h2>
+                            </div>
+                            <span class="text-s text-gray-400 font-sans">
+                                <button type="button" onclick="event.stopPropagation(); openEditModuleModal(<?= $mod_id ?>, '<?= htmlspecialchars(addslashes($module['ModuleName'])) ?>')" class="text-blue-600 hover:underline">Edit Title</button>
+                                    <span class="text-gray-300">|</span>
+                                    <form action="delete-module.php" method="POST" onsubmit="return confirm('Are you sure you want to delete this entire module? All uploaded contents and assignments will be destroyed permanent!');" class="inline" onclick="event.stopPropagation();">
+                                        <input type="hidden" name="course_id" value="<?= $course_id ?>">
+                                        <input type="hidden" name="module_id" value="<?= $mod_id ?>">
+                                        <button type="submit" class="text-red-600 hover:underline">Delete</button>
+                                    </form>
+                            </span>
+                        </div>
+                    </summary>
                     <div class="px-6 pb-6">
                         <div class="bg-gray-50 rounded-2xl border p-5 mb-4">
                             <div class="flex justify-between items-center mb-4"><h3 class="text-xl font-bold text-school-green">📚 Learning Materials</h3><button onclick="openMaterialModal(<?= $mod_id ?>)" class="bg-school-green text-white px-4 py-2 rounded-xl text-xs font-semibold">+ Upload Material</button></div>
@@ -126,8 +149,18 @@ $active = 'content';
                                 <div class="space-y-2">
                                     <?php foreach ($mod_materials as $material): ?>
                                         <div class="flex justify-between items-center border rounded-xl p-4 bg-white">
-                                            <!-- Adjusted tracking asset directory references prefix string -->
-                                            <div><a href="../public/<?= htmlspecialchars($material['FilePath']) ?>" target="_blank" class="font-semibold text-school-green hover:underline">📄 <?= htmlspecialchars($material['MaterialName']) ?></a><p class="text-[10px] text-gray-400 mt-0.5"><?= htmlspecialchars(strtoupper($material['FileType'])) ?></p></div>
+                                            <div>
+                                                <a href="../public/<?= htmlspecialchars($material['FilePath']) ?>" target="_blank" class="font-semibold text-school-green hover:underline">📄 <?= htmlspecialchars($material['MaterialName']) ?></a>
+                                                <p class="text-[10px] text-gray-400 mt-0.5"><?= htmlspecialchars(strtoupper($material['FileType'])) ?> · Uploaded: <?= $material['UploadDate'] ?></p>
+                                            </div>
+                                            <div class="flex gap-3 text-xs font-sans">
+                                                <button type="button" onclick='openEditMaterialModal(<?= json_encode(["id" => $material["MaterialID"] ?? $material["Material_ID"], "name" => $material["MaterialName"], "file_name" => $material["FileName"]]) ?>)' class="text-blue-600 font-semibold hover:underline">Edit</button>
+                                                <form action="delete-material.php" method="POST" onsubmit="return confirm('Delete this file item permanently?');">
+                                                    <input type="hidden" name="course_id" value="<?= $course_id ?>">
+                                                    <input type="hidden" name="material_id" value="<?= $material['MaterialID'] ?? $material['Material_ID'] ?>">
+                                                    <button type="submit" class="text-red-600 font-semibold hover:underline">Delete</button>
+                                                </form>
+                                            </div>
                                         </div>
                                     <?php endforeach; ?>
                                 </div>
@@ -164,7 +197,7 @@ $active = 'content';
         <?php endforeach; endif; ?>
     </main>
 
-    <!-- Modals form processing triggers execute locally -->
+    <!-- Modals Layout Frame Objects Elements -->
     <div id="addModuleModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
         <div class="bg-white rounded-2xl p-6 w-full max-w-md font-sans">
             <h3 class="text-xl font-bold text-school-green mb-4">Add Module</h3>
@@ -173,6 +206,19 @@ $active = 'content';
                 <label class="block text-sm font-semibold text-gray-600 mb-1">Module Name</label>
                 <input type="text" name="module_name" required class="w-full border rounded-xl px-4 py-2 mb-4 focus:ring-2 focus:ring-school-green text-sm" placeholder="Syllabus Module Title">
                 <div class="flex justify-end gap-3"><button type="button" onclick="document.getElementById('addModuleModal').classList.add('hidden')" class="px-4 py-2 text-gray-500">Cancel</button><button type="submit" class="bg-school-green text-white px-5 py-2 rounded-xl font-semibold">Add Module</button></div>
+            </form>
+        </div>
+    </div>
+
+    <div id="editModuleModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-md font-sans">
+            <h3 class="text-xl font-bold text-school-green mb-4">Edit Module Title</h3>
+            <form action="edit-module.php" method="POST">
+                <input type="hidden" name="course_id" value="<?= $course_id ?>">
+                <input type="hidden" name="module_id" id="editModuleId" value="">
+                <label class="block text-sm font-semibold text-gray-600 mb-1">Module Name</label>
+                <input type="text" name="module_name" id="editModuleName" required class="w-full border rounded-xl px-4 py-2 mb-4 focus:ring-2 focus:ring-school-green text-sm">
+                <div class="flex justify-end gap-3"><button type="button" onclick="document.getElementById('editModuleModal').classList.add('hidden')" class="px-4 py-2 text-gray-500">Cancel</button><button type="submit" class="bg-school-green text-white px-5 py-2 rounded-xl font-semibold">Save Changes</button></div>
             </form>
         </div>
     </div>
@@ -188,6 +234,22 @@ $active = 'content';
                 <label class="block text-sm font-semibold text-gray-600 mb-1">File</label>
                 <input type="file" name="material_file" required class="w-full border rounded-xl px-4 py-2 mb-4 text-sm">
                 <div class="flex justify-end gap-3"><button type="button" onclick="document.getElementById('addMaterialModal').classList.add('hidden')" class="px-4 py-2 text-gray-500">Cancel</button><button type="submit" class="bg-school-green text-white px-5 py-2 rounded-xl font-semibold">Upload</button></div>
+            </form>
+        </div>
+    </div>
+
+    <div id="editMaterialModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-md font-sans">
+            <h3 class="text-xl font-bold text-school-green mb-4">Edit Learning Material</h3>
+            <form action="edit-material.php" method="POST" enctype="multipart/form-data">
+                <input type="hidden" name="course_id" value="<?= $course_id ?>">
+                <input type="hidden" name="material_id" id="editMaterialId" value="">
+                <label class="block text-sm font-semibold text-gray-600 mb-1">Material Name</label>
+                <input type="text" name="material_name" id="editMaterialName" required class="w-full border rounded-xl px-4 py-2 mb-3 text-sm">
+                <p id="editMaterialCurrentFile" class="text-xs text-gray-500 mb-3"></p>
+                <label class="block text-sm font-semibold text-gray-600 mb-1">Replace File (Optional)</label>
+                <input type="file" name="material_file" class="w-full border rounded-xl px-4 py-2 mb-4 text-sm">
+                <div class="flex justify-end gap-3"><button type="button" onclick="document.getElementById('editMaterialModal').classList.add('hidden')" class="px-4 py-2 text-gray-500">Cancel</button><button type="submit" class="bg-school-green text-white px-5 py-2 rounded-xl font-semibold">Update Material</button></div>
             </form>
         </div>
     </div>
@@ -239,6 +301,20 @@ $active = 'content';
     <script>
         function openMaterialModal(id) { document.getElementById('materialModuleId').value = id; document.getElementById('addMaterialModal').classList.remove('hidden'); }
         function openAssignmentModal(id) { document.getElementById('assignmentModuleId').value = id; document.getElementById('addAssignmentModal').classList.remove('hidden'); }
+        
+        function openEditModuleModal(id, currentName) {
+            document.getElementById('editModuleId').value = id;
+            document.getElementById('editModuleName').value = currentName;
+            document.getElementById('editModuleModal').classList.remove('hidden');
+        }
+
+        function openEditMaterialModal(mat) {
+            document.getElementById('editMaterialId').value = mat.id;
+            document.getElementById('editMaterialName').value = mat.name;
+            document.getElementById('editMaterialCurrentFile').textContent = 'Current file name: ' + mat.file_name;
+            document.getElementById('editMaterialModal').classList.remove('hidden');
+        }
+
         function openEditAssignmentModal(asg) {
             document.getElementById('editAssignmentId').value = asg.id; document.getElementById('editAssignmentTitle').value = asg.title;
             document.getElementById('editAssignmentInstructions').value = asg.description; document.getElementById('editAssignmentDueDate').value = asg.due_date;

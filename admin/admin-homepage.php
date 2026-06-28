@@ -49,6 +49,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     }
 }
 
+// --- HANDLE EDIT ANNOUNCEMENT ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'edit_admin_announcement') {
+    $announcement_id = intval($_POST['announcement_id'] ?? 0);
+    $title = trim($_POST['title'] ?? '');
+    $message = trim($_POST['message'] ?? '');
+
+    if ($announcement_id > 0 && !empty($title) && !empty($message)) {
+        try {
+            $update_stmt = $pdo->prepare("UPDATE Announcements SET Title = :title, Message = :message WHERE Announcement_ID = :id");
+            $update_stmt->execute([
+                ':title' => $title,
+                ':message' => $message,
+                ':id' => $announcement_id
+            ]);
+            $success_msg = "Announcement successfully updated.";
+        } catch (PDOException $e) {
+            $error_msg = "Database Error: Could not edit entry. " . $e->getMessage();
+        }
+    } else {
+        $error_msg = "Please ensure all fields are properly filled.";
+    }
+}
+
+// --- HANDLE DELETE ANNOUNCEMENT ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete_admin_announcement') {
+    $announcement_id = intval($_POST['announcement_id'] ?? 0);
+
+    if ($announcement_id > 0) {
+        try {
+            $delete_stmt = $pdo->prepare("DELETE FROM Announcements WHERE Announcement_ID = :id");
+            $delete_stmt->execute([':id' => $announcement_id]);
+            $success_msg = "Announcement has been permanently deleted.";
+        } catch (PDOException $e) {
+            $error_msg = "Database Error: Could not delete entry. " . $e->getMessage();
+        }
+    } else {
+        $error_msg = "Invalid data payload target context ID structure encountered.";
+    }
+}
+
 $active = 'home';
 
 try {
@@ -75,8 +115,9 @@ try {
     ");
     $total_courses = $course_count_stmt->fetchColumn();
 
+    // FIXED: Selected 'a.Announcement_ID' explicitly from DB target
     $ann_stmt = $pdo->prepare("
-        SELECT a.Title, a.Message, a.PostDate, c.CourseCode 
+        SELECT a.Announcement_ID, a.Title, a.Message, a.PostDate, c.CourseCode 
         FROM Announcements a
         INNER JOIN Courses c ON a.FK_Course_ID = c.Course_ID
         WHERE c.CourseCode = 'ADMIN'
@@ -131,13 +172,25 @@ try {
                 }
             }
         }
+
+        // JavaScript modal population utilities
+        function openEditModal(id, title, message) {
+            document.getElementById('edit_announcement_id').value = id;
+            document.getElementById('edit_title').value = title;
+            document.getElementById('edit_message').value = message;
+            document.getElementById('editModal').classList.remove('hidden');
+        }
+
+        function closeEditModal() {
+            document.getElementById('editModal').classList.add('hidden');
+        }
     </script>
 </head>
 <body class="bg-gradient-to-br from-school-green via-[#125730] to-school-yellow min-h-screen font-serif text-gray-800 flex flex-col md:flex-row">
 
     <?php include '../includes/sidebar.php'; ?>
 
-    <main class="ml-0 md:ml-64 flex-1 p-4 sm:p-8 overflow-y-auto h-screen w-full w-full">
+    <main class="ml-0 md:ml-64 flex-1 p-4 sm:p-8 overflow-y-auto h-screen w-full">
         
         <?php if ($success_msg): ?>
             <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl px-5 py-3 mb-4 text-sm font-sans shadow-sm">
@@ -181,12 +234,28 @@ try {
                                     <div id="extendedAdminLogsMain" class="hidden space-y-4 pt-4 border-t border-dashed border-gray-200">
                                 <?php endif; ?>
 
-                                <div class="p-3 rounded-xl border bg-amber-50/60 border-amber-200 relative">
+                                <div class="p-4 rounded-xl border bg-amber-50/60 border-amber-200 relative group transition-all hover:bg-amber-50">
                                     <span class="absolute top-3 right-3 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-green-800 text-white">
                                         <?= date('M d, Y @ h:i A', strtotime($announcement['PostDate'])) ?>
                                     </span>
                                     <h4 class="font-bold text-school-green text-sm pr-24"><?= htmlspecialchars($announcement['Title']) ?></h4>
-                                    <p class="text-xs text-gray-600 mt-1"><?= htmlspecialchars($announcement['Message']) ?></p>
+                                    <p class="text-xs text-gray-600 mt-1 mb-3"><?= htmlspecialchars($announcement['Message']) ?></p>
+                                    
+                                    <!-- Dynamic Action Control Interface Layer -->
+                                    <div class="flex items-center gap-3 pt-2 border-t border-amber-200/50">
+                                        <button 
+                                            onclick="openEditModal(<?= $announcement['Announcement_ID'] ?>, '<?= addslashes(htmlspecialchars($announcement['Title'])) ?>', '<?= addslashes(htmlspecialchars($announcement['Message'])) ?>')" 
+                                            class="text-[11px] text-green-700 hover:text-green-900 font-semibold flex items-center gap-1 transition">
+                                            Edit
+                                        </button>
+                                        <form action="admin-homepage.php" method="POST" onsubmit="return confirm('Are you sure you want to permanently delete this announcement?');" class="inline">
+                                            <input type="hidden" name="action" value="delete_admin_announcement">
+                                            <input type="hidden" name="announcement_id" value="<?= $announcement['Announcement_ID'] ?>">
+                                            <button type="submit" class="text-[11px] text-red-600 hover:text-red-800 font-semibold flex items-center gap-1 transition">
+                                            Delete
+                                            </button>
+                                        </form>
+                                    </div>
                                 </div>
 
                             <?php 
@@ -252,7 +321,8 @@ try {
         </div>
     </main>
 
-    <div id="broadcastModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+    <!-- Create/Broadcast Modal View -->
+    <div id="broadcastModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50 animate-fade-in">
         <div class="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl font-sans">
             <h3 class="text-xl font-bold text-green-800 mb-1">Create Announcement</h3>
             <p class="text-xs text-gray-400 mb-4 italic">This injects a critical notification card into all homepages.</p>
@@ -266,6 +336,30 @@ try {
                 <div class="flex justify-end gap-3">
                     <button type="button" onclick="document.getElementById('broadcastModal').classList.add('hidden')" class="px-4 py-2 rounded-xl text-gray-500 hover:bg-gray-100 transition text-sm">Cancel</button>
                     <button type="submit" class="bg-green-700 text-white px-5 py-2 rounded-xl font-semibold hover:bg-green-800 transition text-sm">Post Announcement</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit Interactive Modal View -->
+    <div id="editModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl font-sans">
+            <h3 class="text-xl font-bold text-green-800 mb-1">Edit Announcement</h3>
+            <p class="text-xs text-gray-400 mb-4 italic">Modify tracking fields for this historical broadcast entry configuration.</p>
+            
+            <form action="admin-homepage.php" method="POST">
+                <input type="hidden" name="action" value="edit_admin_announcement">
+                <input type="hidden" name="announcement_id" id="edit_announcement_id">
+                
+                <label class="block text-sm font-semibold text-gray-600 mb-1">Announcement Heading / Title</label>
+                <input type="text" name="title" id="edit_title" required maxlength="150" class="w-full border border-gray-300 rounded-xl px-4 py-2 mb-4 focus:outline-none focus:ring-2 focus:ring-blue-700 text-sm">
+                
+                <label class="block text-sm font-semibold text-gray-600 mb-1">Announcement Content</label>
+                <textarea name="message" id="edit_message" required rows="4" maxlength="1000" class="w-full border border-gray-300 rounded-xl px-4 py-2 mb-6 focus:outline-none focus:ring-2 focus:ring-blue-700 text-sm"></textarea>
+                
+                <div class="flex justify-end gap-3">
+                    <button type="button" onclick="closeEditModal()" class="px-4 py-2 rounded-xl text-gray-500 hover:bg-gray-100 transition text-sm">Cancel</button>
+                    <button type="submit" class="bg-green-700 text-white px-5 py-2 rounded-xl font-semibold hover:bg-green-800 transition text-sm">Update Announcement</button>
                 </div>
             </form>
         </div>
