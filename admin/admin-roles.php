@@ -73,7 +73,7 @@ try {
         }
     </script>
 </head>
-<body class="bg-gradient-to-br from-school-green via-[#125730] to-school-yellow min-h-screen">
+<body class="bg-gradient-to-br from-school-green via-[#125730] to-school-yellow min-h-screen font-serif">
 
     <?php include '../includes/sidebar.php'; ?>
 

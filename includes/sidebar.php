@@ -55,6 +55,10 @@ $current_page = basename($_SERVER['PHP_SELF']);
                     <span class="text-xl">🏆</span>
                     <span>Manage Roles</span>
                 </a>
+                <a href="../shared/Account-info.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl font-semibold transition <?= ($current_page === 'Account-info.php') ? 'bg-school-green text-white shadow-md' : 'text-school-green hover:bg-school-green/5' ?>">
+                    <span class="text-xl">👤</span>
+                    <span>Account</span>
+                </a>
 
             <?php else: ?>
                 <a href="../student/homepage.php" class="flex items-center space-x-3 px-4 py-3 rounded-xl font-semibold transition <?= ($current_page === 'homepage.php') ? 'bg-school-green text-white shadow-md' : 'text-school-green hover:bg-school-green/5' ?>">
