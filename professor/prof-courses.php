@@ -118,5 +118,15 @@ try {
             </div>
         </section>
     </main>
+
+    <script>
+        document.getElementById('searchInput').addEventListener('input', function () {
+            const q = this.value.toLowerCase().trim();
+            document.querySelectorAll('.course-card').forEach(card => {
+                card.style.display = card.dataset.search.includes(q) ? '' : 'none';
+            });
+        });
+    </script>
+
 </body>
 </html>
