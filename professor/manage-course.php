@@ -24,6 +24,16 @@ try {
     $course_stmt->execute([':course_id' => $course_id]); 
     $course = $course_stmt->fetch(); 
 
+    $grade_section_stmt = $pdo->prepare("
+        SELECT gl.GradeName, sec.SectionName
+        FROM Courses c
+        LEFT JOIN Section sec   ON c.FK_Section_ID = sec.Section_ID
+        LEFT JOIN GradeLevel gl ON sec.FK_GradeLevel_ID = gl.GradeLevel_ID
+        WHERE c.Course_ID = :course_id
+    ");
+    $grade_section_stmt->execute([':course_id' => $course_id]);
+    $grade_section = $grade_section_stmt->fetch(PDO::FETCH_ASSOC);
+
     if (!$course) { header('Location: prof-courses.php?error=course_not_found'); exit; }
 
     $modules_stmt = $pdo->prepare("SELECT CourseModule_ID, ModuleName, ModuleSequence FROM CourseModule WHERE FK_Course_ID = :course_id ORDER BY ModuleSequence ASC"); 
@@ -108,7 +118,9 @@ $active = 'content';
                 <div>
                     <h1 class="text-4xl font-bold text-school-green flex items-center flex-wrap gap-2">
                         <span><?= htmlspecialchars($course['CourseCode']) ?> — <?= htmlspecialchars($course['CourseName']) ?></span>
-                        <span class="text-xs bg-school-gold text-white px-2.5 py-1 rounded-full font-sans font-bold uppercase tracking-wider"><?= htmlspecialchars($course['GradeName'] ?? 'Academic') ?> — <?= htmlspecialchars($course['SectionName']) ?></span>
+                        <span class="text-xs bg-school-gold text-white px-2.5 py-1 rounded-full font-sans font-bold uppercase tracking-wider shadow-sm">
+                            <?= htmlspecialchars($grade_section['GradeName'] ?? 'Academic') ?> — <?= htmlspecialchars($grade_section['SectionName'] ?? '') ?>
+                        </span>
                     </h1>
                     <p class="text-gray-500 italic mt-2">Course Management</p>
                 </div>

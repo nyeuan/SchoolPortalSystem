@@ -27,7 +27,13 @@ try {
     if (!$course) { header('Location: prof-courses.php?error=not_authorized'); exit; }
 
     // 2. Fetch Grade and Section metadata badges
-    $grade_section_stmt = $pdo->prepare("SELECT gl.GradeName, sec.SectionName FROM Courses c LEFT JOIN SectionCourses sc ON c.Course_ID = sc.FK_Course_ID LEFT JOIN Section sec ON sc.FK_Section_ID = sec.Section_ID LEFT JOIN GradeLevel gl ON sec.FK_GradeLevel_ID = gl.GradeLevel_ID WHERE c.Course_ID = :course_id");
+    $grade_section_stmt = $pdo->prepare("
+        SELECT gl.GradeName, sec.SectionName
+        FROM Courses c
+        LEFT JOIN Section sec   ON c.FK_Section_ID = sec.Section_ID
+        LEFT JOIN GradeLevel gl ON sec.FK_GradeLevel_ID = gl.GradeLevel_ID
+        WHERE c.Course_ID = :course_id
+    ");
     $grade_section_stmt->execute([':course_id' => $course_id]);
     $grade_section = $grade_section_stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -107,7 +113,9 @@ $active = 'coursegrades';
         <section class="bg-[#fcfbf7] rounded-3xl p-6 border shadow mb-6">
             <p class="text-xs uppercase tracking-wide text-gray-600 font-sans"><?= htmlspecialchars($course['CourseCode']) ?> — <?= htmlspecialchars($course['CourseName']) ?></p>
             <h1 class="text-4xl font-bold text-school-green mt-1">Course Grade Management</h1>
-            <span class="text-xs bg-school-gold text-white px-2.5 py-1 rounded-full font-sans font-bold uppercase tracking-wider shadow-sm"><?= htmlspecialchars($grade_section['GradeName'] ?? 'Academic') ?> — <?= htmlspecialchars($grade_section['SectionName']) ?></span> 
+            <span class="text-xs bg-school-gold text-white px-2.5 py-1 rounded-full font-sans font-bold uppercase tracking-wider shadow-sm">
+                <?= htmlspecialchars($grade_section['GradeName'] ?? 'Academic') ?> — <?= htmlspecialchars($grade_section['SectionName'] ?? '') ?>
+            </span>          
         </section>
 
         <?php include '../includes/course-nav.php'; ?>

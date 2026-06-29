@@ -14,7 +14,13 @@ try {
     $course = $enroll_stmt->fetch();
     if (!$course) { header('Location: courses.php?error=not_enrolled'); exit; }
 
-    $grade_section_stmt = $pdo->prepare("SELECT gl.GradeName, sec.SectionName FROM Courses c LEFT JOIN SectionCourses sc ON c.Course_ID = sc.FK_Course_ID LEFT JOIN Section sec ON sc.FK_Section_ID = sec.Section_ID LEFT JOIN GradeLevel gl ON sec.FK_GradeLevel_ID = gl.GradeLevel_ID WHERE c.Course_ID = :course_id");
+    $grade_section_stmt = $pdo->prepare("
+        SELECT gl.GradeName, sec.SectionName
+        FROM Courses c
+        LEFT JOIN Section sec    ON c.FK_Section_ID = sec.Section_ID
+        LEFT JOIN GradeLevel gl  ON sec.FK_GradeLevel_ID = gl.GradeLevel_ID
+        WHERE c.Course_ID = :course_id
+    ");
     $grade_section_stmt->execute([':course_id' => $course_id]);
     $grade_section = $grade_section_stmt->fetch(PDO::FETCH_ASSOC);
 

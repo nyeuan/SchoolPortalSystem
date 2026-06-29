@@ -44,10 +44,9 @@ try {
     $grade_section_stmt = $pdo->prepare("
         SELECT gl.GradeName, sec.SectionName
         FROM Courses c
-        LEFT JOIN SectionCourses sc ON c.Course_ID = sc.FK_Course_ID
-        LEFT JOIN Section sec       ON sc.FK_Section_ID = sec.Section_ID
-        LEFT JOIN GradeLevel gl     ON sec.FK_GradeLevel_ID = gl.GradeLevel_ID
-        WHERE c.Course_ID = :course_id  
+        LEFT JOIN Section sec   ON c.FK_Section_ID = sec.Section_ID
+        LEFT JOIN GradeLevel gl ON sec.FK_GradeLevel_ID = gl.GradeLevel_ID
+        WHERE c.Course_ID = :course_id
     ");
     $grade_section_stmt->execute([':course_id' => $course_id]);
     $grade_section = $grade_section_stmt->fetch(PDO::FETCH_ASSOC);
@@ -126,8 +125,8 @@ $active = 'roster';
                 <h1 class="text-4xl font-bold text-school-green mt-1">Class Roster</h1>
             
                 <span class="text-xs bg-school-gold text-white px-2.5 py-1 rounded-full font-sans font-bold uppercase tracking-wider shadow-sm">
-                    <?= htmlspecialchars($grade_section['GradeName'] ?? 'Academic') ?> — <?= htmlspecialchars($grade_section['SectionName']) ?>
-                </span>   
+                    <?= htmlspecialchars($grade_section['GradeName'] ?? 'Academic') ?> — <?= htmlspecialchars($grade_section['SectionName'] ?? '') ?>
+                </span>
             </div>
         </section>
         
